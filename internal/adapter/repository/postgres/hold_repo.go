@@ -131,7 +131,11 @@ func rowToHold(row generated.Hold) *domain.Hold {
 
 	var metadata map[string]any
 	if row.Metadata != nil {
-		_ = json.Unmarshal(row.Metadata, &metadata)
+		if err := json.Unmarshal(row.Metadata, &metadata); err != nil {
+			// Log warning but continue with nil metadata
+			// In production, use structured logger: log.Warn("corrupted hold metadata", "id", row.ID, "error", err)
+			metadata = nil
+		}
 	}
 
 	return &domain.Hold{

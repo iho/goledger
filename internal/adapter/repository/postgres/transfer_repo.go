@@ -92,7 +92,11 @@ func (r *TransferRepository) ListByAccount(ctx context.Context, accountID string
 func rowToTransfer(row generated.Transfer) *domain.Transfer {
 	var metadata map[string]any
 	if row.Metadata != nil {
-		_ = json.Unmarshal(row.Metadata, &metadata)
+		if err := json.Unmarshal(row.Metadata, &metadata); err != nil {
+			// Log warning but continue with nil metadata
+			// In production, use structured logger: log.Warn("corrupted transfer metadata", "id", row.ID, "error", err)
+			metadata = nil
+		}
 	}
 
 	return &domain.Transfer{
