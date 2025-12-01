@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -28,6 +28,9 @@ RUN apk add --no-cache ca-certificates tzdata
 
 # Copy binary from builder
 COPY --from=builder /app/goledger .
+
+# Copy migrations
+COPY internal/infrastructure/postgres/migrations ./internal/infrastructure/postgres/migrations
 
 # Expose port
 EXPOSE 8080

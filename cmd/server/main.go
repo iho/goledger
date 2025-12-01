@@ -50,6 +50,11 @@ func main() {
 
 	log.Info().Msg("connected to postgres")
 
+	// Run migrations
+	if err := postgres.RunMigrations(cfg.DatabaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
+		log.Fatal().Err(err).Msg("failed to run migrations")
+	}
+
 	// Connect to Redis
 	redisClient, err := redis.NewClient(ctx, cfg.RedisURL)
 	if err != nil {
