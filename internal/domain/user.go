@@ -7,13 +7,14 @@ import (
 
 // User represents a system user
 type User struct {
-	ID        string
-	Email     string
-	Name      string
-	Role      Role
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Active    bool
+	ID             string
+	Email          string
+	Name           string
+	HashedPassword string // bcrypt hashed password
+	Role           Role
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Active         bool
 }
 
 // Role represents a user's access level
