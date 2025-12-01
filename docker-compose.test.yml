@@ -10,8 +10,6 @@ services:
       - "5433:5432"
     tmpfs:
       - /var/lib/postgresql/data
-    volumes:
-      - ./internal/infrastructure/postgres/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ledger -d ledger_test"]
       interval: 2s

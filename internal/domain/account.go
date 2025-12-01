@@ -1,4 +1,3 @@
-
 package domain
 
 import (
@@ -15,14 +14,20 @@ type Account struct {
 	Name                 string
 	Currency             string
 	Balance              decimal.Decimal
+	EncumberedBalance    decimal.Decimal
 	Version              int64
 	AllowNegativeBalance bool
 	AllowPositiveBalance bool
 }
 
+// AvailableBalance returns the balance available for use.
+func (a *Account) AvailableBalance() decimal.Decimal {
+	return a.Balance.Sub(a.EncumberedBalance)
+}
+
 // ValidateDebit checks if account can be debited by amount.
 func (a *Account) ValidateDebit(amount decimal.Decimal) error {
-	newBalance := a.Balance.Sub(amount)
+	newBalance := a.AvailableBalance().Sub(amount)
 	if !a.AllowNegativeBalance && newBalance.IsNegative() {
 		return ErrNegativeBalanceNotAllowed
 	}

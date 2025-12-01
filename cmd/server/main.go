@@ -8,61 +8,60 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"log/slog"
 
 	httpAdapter "github.com/iho/goledger/internal/adapter/http"
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	postgresRepo "github.com/iho/goledger/internal/adapter/repository/postgres"
 	redisRepo "github.com/iho/goledger/internal/adapter/repository/redis"
 	"github.com/iho/goledger/internal/infrastructure/config"
+	"github.com/iho/goledger/internal/infrastructure/logger"
 	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/redis"
 	"github.com/iho/goledger/internal/usecase"
 )
 
 func main() {
-	// Setup logger
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
-
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load configuration")
+		panic("failed to load configuration: " + err.Error())
 	}
 
-	// Setup log level
-	level, err := zerolog.ParseLevel(cfg.LogLevel)
-	if err != nil {
-		level = zerolog.InfoLevel
-	}
-
-	zerolog.SetGlobalLevel(level)
+	// Setup logger
+	l := logger.New(logger.Config{
+		Level:  cfg.LogLevel,
+		Format: "json", // or "text" depending on env
+	})
+	slog.SetDefault(l)
 
 	ctx := context.Background()
 
 	// Connect to PostgreSQL
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, cfg.DatabaseMaxConns, cfg.DatabaseMinConns)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to postgres")
+		l.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
-	log.Info().Msg("connected to postgres")
+	l.Info("connected to postgres")
 
 	// Run migrations
 	if err := postgres.RunMigrations(cfg.DatabaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
-		log.Fatal().Err(err).Msg("failed to run migrations")
+		l.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	// Connect to Redis
 	redisClient, err := redis.NewClient(ctx, cfg.RedisURL)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to redis")
+		l.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
 	}
 	defer redisClient.Close()
 
-	log.Info().Msg("connected to redis")
+	l.Info("connected to redis")
 
 	// Initialize repositories
 	txManager := postgresRepo.NewTxManager(pool)
@@ -70,6 +69,7 @@ func main() {
 	transferRepo := postgresRepo.NewTransferRepository(pool)
 	entryRepo := postgresRepo.NewEntryRepository(pool)
 	ledgerRepo := postgresRepo.NewLedgerRepository(pool)
+	holdRepo := postgresRepo.NewHoldRepository(pool)
 	idempotencyStore := redisRepo.NewIdempotencyStore(redisClient)
 	idGen := postgresRepo.NewULIDGenerator()
 
@@ -80,12 +80,14 @@ func main() {
 		WithRetrier(retrier)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, idGen)
 
 	// Initialize handlers
 	accountHandler := handler.NewAccountHandler(accountUC)
 	transferHandler := handler.NewTransferHandler(transferUC)
 	entryHandler := handler.NewEntryHandler(entryUC)
 	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
+	holdHandler := handler.NewHoldHandler(holdUC)
 	healthHandler := handler.NewHealthHandler(pool, redisClient)
 
 	// Create router
@@ -95,7 +97,9 @@ func main() {
 		EntryHandler:     entryHandler,
 		HealthHandler:    healthHandler,
 		LedgerHandler:    ledgerHandler,
+		HoldHandler:      holdHandler,
 		IdempotencyStore: idempotencyStore,
+		Logger:           l,
 	})
 
 	// Create server with timeouts
@@ -109,11 +113,12 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Info().Str("port", cfg.HTTPPort).Msg("starting server")
+		l.Info("starting server", "port", cfg.HTTPPort)
 		err := server.ListenAndServe()
 
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal().Err(err).Msg("server failed")
+			l.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -122,15 +127,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Info().Msg("shutting down server...")
+	l.Info("shutting down server...")
 
 	// Graceful shutdown with configured timeout
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("server forced to shutdown")
+		l.Error("server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Info().Msg("server stopped")
+	l.Info("server stopped")
 }

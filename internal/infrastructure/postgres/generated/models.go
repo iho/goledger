@@ -18,6 +18,7 @@ type Account struct {
 	AllowPositiveBalance bool               `json:"allow_positive_balance"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	EncumberedBalance    pgtype.Numeric     `json:"encumbered_balance"`
 }
 
 type Entry struct {
@@ -29,6 +30,17 @@ type Entry struct {
 	AccountCurrentBalance  pgtype.Numeric     `json:"account_current_balance"`
 	AccountVersion         int64              `json:"account_version"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+type Hold struct {
+	ID        string             `json:"id"`
+	AccountID string             `json:"account_id"`
+	Amount    pgtype.Numeric     `json:"amount"`
+	Status    string             `json:"status"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Metadata  []byte             `json:"metadata"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Transfer struct {

@@ -1,4 +1,3 @@
-
 package postgres
 
 import (
@@ -108,6 +107,18 @@ func (r *AccountRepository) UpdateBalance(ctx context.Context, tx usecase.Transa
 	})
 }
 
+// UpdateEncumberedBalance updates the encumbered balance of an account.
+func (r *AccountRepository) UpdateEncumberedBalance(ctx context.Context, tx usecase.Transaction, id string, encumberedBalance decimal.Decimal, updatedAt time.Time) error {
+	pgxTx := tx.(*Tx).PgxTx()
+	queries := generated.New(pgxTx)
+
+	return queries.UpdateAccountEncumbered(ctx, generated.UpdateAccountEncumberedParams{
+		ID:                id,
+		EncumberedBalance: decimalToNumeric(encumberedBalance),
+		UpdatedAt:         timeToPgTimestamptz(updatedAt),
+	})
+}
+
 // List lists accounts with pagination.
 func (r *AccountRepository) List(ctx context.Context, limit, offset int) ([]*domain.Account, error) {
 	rows, err := r.queries.ListAccounts(ctx, generated.ListAccountsParams{
@@ -132,6 +143,7 @@ func rowToAccount(row generated.Account) *domain.Account {
 		Name:                 row.Name,
 		Currency:             row.Currency,
 		Balance:              numericToDecimal(row.Balance),
+		EncumberedBalance:    numericToDecimal(row.EncumberedBalance),
 		Version:              row.Version,
 		AllowNegativeBalance: row.AllowNegativeBalance,
 		AllowPositiveBalance: row.AllowPositiveBalance,

@@ -16,6 +16,7 @@ type AccountRepository interface {
 	GetByIDForUpdate(ctx context.Context, tx Transaction, id string) (*domain.Account, error)
 	GetByIDsForUpdate(ctx context.Context, tx Transaction, ids []string) ([]*domain.Account, error)
 	UpdateBalance(ctx context.Context, tx Transaction, id string, balance decimal.Decimal, updatedAt time.Time) error
+	UpdateEncumberedBalance(ctx context.Context, tx Transaction, id string, encumberedBalance decimal.Decimal, updatedAt time.Time) error
 	List(ctx context.Context, limit, offset int) ([]*domain.Account, error)
 }
 
@@ -37,6 +38,15 @@ type EntryRepository interface {
 // LedgerRepository defines data access for ledger-wide operations.
 type LedgerRepository interface {
 	CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error)
+}
+
+// HoldRepository defines data access for holds.
+type HoldRepository interface {
+	Create(ctx context.Context, tx Transaction, hold *domain.Hold) error
+	GetByID(ctx context.Context, id string) (*domain.Hold, error)
+	GetByIDForUpdate(ctx context.Context, tx Transaction, id string) (*domain.Hold, error)
+	UpdateStatus(ctx context.Context, tx Transaction, id string, status domain.HoldStatus, updatedAt time.Time) error
+	ListByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Hold, error)
 }
 
 // Transaction represents a database transaction.

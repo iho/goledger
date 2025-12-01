@@ -1,4 +1,3 @@
-
 package testutil
 
 import (
@@ -13,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 )
 
@@ -30,6 +30,24 @@ func NewTestDB(t *testing.T) *TestDB {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable"
+	}
+
+	// Run migrations
+	// Assuming tests are run from project root or subdirectories, we need to find migrations.
+	// This is a bit hacky for tests but works for typical setups.
+	// Try absolute path if in docker, or relative if local.
+	migrationsPath := "internal/infrastructure/postgres/migrations"
+	if _, err := os.Stat(migrationsPath); os.IsNotExist(err) {
+		// Try relative from tests/integration
+		migrationsPath = "../../internal/infrastructure/postgres/migrations"
+	}
+	if _, err := os.Stat(migrationsPath); os.IsNotExist(err) {
+		// Try relative from tests/testutil
+		migrationsPath = "../../../internal/infrastructure/postgres/migrations"
+	}
+
+	if err := postgres.RunMigrations(dbURL, migrationsPath); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -61,6 +79,7 @@ func (db *TestDB) TruncateAll(ctx context.Context) {
 	db.t.Helper()
 
 	_, err := db.Pool.Exec(ctx, `
+		TRUNCATE TABLE holds CASCADE;
 		TRUNCATE TABLE entries CASCADE;
 		TRUNCATE TABLE transfers CASCADE;
 		TRUNCATE TABLE accounts CASCADE;

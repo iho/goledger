@@ -5,9 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"log/slog"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/rs/zerolog/log"
 )
 
 // PostgreSQL error codes for retryable errors.
@@ -22,6 +23,7 @@ type Retrier struct {
 	initialInterval time.Duration
 	maxInterval     time.Duration
 	maxElapsedTime  time.Duration
+	logger          *slog.Logger
 }
 
 // NewRetrier creates a new PostgreSQL retrier with default settings.
@@ -31,6 +33,7 @@ func NewRetrier() *Retrier {
 		initialInterval: 50 * time.Millisecond,
 		maxInterval:     1 * time.Second,
 		maxElapsedTime:  10 * time.Second,
+		logger:          slog.Default(),
 	}
 }
 
@@ -58,10 +61,10 @@ func (r *Retrier) Retry(ctx context.Context, operation func() error) error {
 			return backoff.Permanent(err)
 		}
 
-		log.Warn().
-			Err(err).
-			Int("retry", retryCount).
-			Msg("retryable database error, retrying")
+		r.logger.Warn("retryable database error, retrying",
+			"error", err,
+			"retry", retryCount,
+		)
 
 		return err
 	}, backoff.WithContext(b, ctx))

@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 
+	"log/slog"
+
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/rs/zerolog/log"
 )
 
 // RunMigrations runs database migrations.
@@ -22,12 +23,12 @@ func RunMigrations(databaseURL string, migrationsPath string) error {
 
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
-			log.Info().Msg("database migrations: no change")
+			slog.Info("database migrations: no change")
 			return nil
 		}
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	log.Info().Msg("database migrations: applied successfully")
+	slog.Info("database migrations: applied successfully")
 	return nil
 }

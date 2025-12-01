@@ -8,6 +8,8 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"log/slog"
+
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	"github.com/iho/goledger/internal/adapter/http/middleware"
 	"github.com/iho/goledger/internal/usecase"
@@ -20,7 +22,9 @@ type RouterConfig struct {
 	EntryHandler     *handler.EntryHandler
 	HealthHandler    *handler.HealthHandler
 	LedgerHandler    *handler.LedgerHandler
+	HoldHandler      *handler.HoldHandler
 	IdempotencyStore usecase.IdempotencyStore
+	Logger           *slog.Logger
 }
 
 // NewRouter creates a new HTTP router.
@@ -31,7 +35,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
 	r.Use(middleware.Metrics)
-	r.Use(chimiddleware.Logger)
+	if cfg.Logger != nil {
+		r.Use(middleware.NewLoggingMiddleware(cfg.Logger).Wrap)
+	} else {
+		r.Use(chimiddleware.Logger)
+	}
 	r.Use(chimiddleware.Recoverer)
 
 	// Health & metrics endpoints
@@ -66,6 +74,13 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			r.Post("/batch", cfg.TransferHandler.CreateBatch)
 			r.Get("/{id}", cfg.TransferHandler.Get)
 			r.Get("/{id}/entries", cfg.EntryHandler.ListByTransfer)
+		})
+
+		// Holds
+		r.Route("/holds", func(r chi.Router) {
+			r.Post("/", cfg.HoldHandler.Create)
+			r.Post("/{id}/void", cfg.HoldHandler.Void)
+			r.Post("/{id}/capture", cfg.HoldHandler.Capture)
 		})
 	})
 

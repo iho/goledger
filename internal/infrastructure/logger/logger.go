@@ -1,51 +1,45 @@
 package logger
 
 import (
-	"io"
+	"log/slog"
 	"os"
-	"time"
-
-	"github.com/rs/zerolog"
 )
 
 // Config holds logger configuration.
 type Config struct {
 	Level  string // debug, info, warn, error
-	Format string // json, console
+	Format string // json, text
 }
 
-// New creates a new zerolog logger based on config.
-func New(cfg Config) zerolog.Logger {
-	var output io.Writer = os.Stdout
-
-	if cfg.Format == "console" {
-		output = zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		}
-	}
-
+// New creates a new slog logger based on config.
+func New(cfg Config) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
-	return zerolog.New(output).
-		Level(level).
-		With().
-		Timestamp().
-		Caller().
-		Logger()
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	var handler slog.Handler
+	if cfg.Format == "text" {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+
+	return slog.New(handler)
 }
 
-func parseLevel(level string) zerolog.Level {
+func parseLevel(level string) slog.Level {
 	switch level {
 	case "debug":
-		return zerolog.DebugLevel
+		return slog.LevelDebug
 	case "info":
-		return zerolog.InfoLevel
+		return slog.LevelInfo
 	case "warn":
-		return zerolog.WarnLevel
+		return slog.LevelWarn
 	case "error":
-		return zerolog.ErrorLevel
+		return slog.LevelError
 	default:
-		return zerolog.InfoLevel
+		return slog.LevelInfo
 	}
 }

@@ -1,20 +1,18 @@
-
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/rs/zerolog"
 )
 
 // LoggingMiddleware logs HTTP requests.
 type LoggingMiddleware struct {
-	logger zerolog.Logger
+	logger *slog.Logger
 }
 
 // NewLoggingMiddleware creates a new LoggingMiddleware.
-func NewLoggingMiddleware(logger zerolog.Logger) *LoggingMiddleware {
+func NewLoggingMiddleware(logger *slog.Logger) *LoggingMiddleware {
 	return &LoggingMiddleware{logger: logger}
 }
 
@@ -26,13 +24,13 @@ func (m *LoggingMiddleware) Wrap(next http.Handler) http.Handler {
 		wrapped := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
 
-		m.logger.Info().
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Int("status", wrapped.statusCode).
-			Dur("duration", time.Since(start)).
-			Str("remote_addr", r.RemoteAddr).
-			Msg("request completed")
+		m.logger.Info("request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", wrapped.statusCode,
+			"duration", time.Since(start),
+			"remote_addr", r.RemoteAddr,
+		)
 	})
 }
 

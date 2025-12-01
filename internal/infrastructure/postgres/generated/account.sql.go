@@ -23,9 +23,9 @@ func (q *Queries) CountAccounts(ctx context.Context) (int64, error) {
 }
 
 const createAccount = `-- name: CreateAccount :one
-INSERT INTO accounts (id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at
+INSERT INTO accounts (id, name, currency, balance, encumbered_balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at)
+VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8, $9)
+RETURNING id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at, encumbered_balance
 `
 
 type CreateAccountParams struct {
@@ -63,12 +63,13 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		&i.AllowPositiveBalance,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EncumberedBalance,
 	)
 	return i, err
 }
 
 const getAccountByID = `-- name: GetAccountByID :one
-SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at FROM accounts WHERE id = $1
+SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at, encumbered_balance FROM accounts WHERE id = $1
 `
 
 func (q *Queries) GetAccountByID(ctx context.Context, id string) (Account, error) {
@@ -84,12 +85,13 @@ func (q *Queries) GetAccountByID(ctx context.Context, id string) (Account, error
 		&i.AllowPositiveBalance,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EncumberedBalance,
 	)
 	return i, err
 }
 
 const getAccountByIDForUpdate = `-- name: GetAccountByIDForUpdate :one
-SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at FROM accounts WHERE id = $1 FOR UPDATE
+SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at, encumbered_balance FROM accounts WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetAccountByIDForUpdate(ctx context.Context, id string) (Account, error) {
@@ -105,12 +107,13 @@ func (q *Queries) GetAccountByIDForUpdate(ctx context.Context, id string) (Accou
 		&i.AllowPositiveBalance,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EncumberedBalance,
 	)
 	return i, err
 }
 
 const getAccountsByIDsForUpdate = `-- name: GetAccountsByIDsForUpdate :many
-SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at FROM accounts WHERE id = ANY($1::text[]) ORDER BY id FOR UPDATE
+SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at, encumbered_balance FROM accounts WHERE id = ANY($1::text[]) ORDER BY id FOR UPDATE
 `
 
 func (q *Queries) GetAccountsByIDsForUpdate(ctx context.Context, dollar_1 []string) ([]Account, error) {
@@ -132,6 +135,7 @@ func (q *Queries) GetAccountsByIDsForUpdate(ctx context.Context, dollar_1 []stri
 			&i.AllowPositiveBalance,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EncumberedBalance,
 		); err != nil {
 			return nil, err
 		}
@@ -144,7 +148,7 @@ func (q *Queries) GetAccountsByIDsForUpdate(ctx context.Context, dollar_1 []stri
 }
 
 const listAccounts = `-- name: ListAccounts :many
-SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at FROM accounts ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, currency, balance, version, allow_negative_balance, allow_positive_balance, created_at, updated_at, encumbered_balance FROM accounts ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListAccountsParams struct {
@@ -171,6 +175,7 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]A
 			&i.AllowPositiveBalance,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EncumberedBalance,
 		); err != nil {
 			return nil, err
 		}
@@ -196,5 +201,22 @@ type UpdateAccountBalanceParams struct {
 
 func (q *Queries) UpdateAccountBalance(ctx context.Context, arg UpdateAccountBalanceParams) error {
 	_, err := q.db.Exec(ctx, updateAccountBalance, arg.ID, arg.Balance, arg.UpdatedAt)
+	return err
+}
+
+const updateAccountEncumbered = `-- name: UpdateAccountEncumbered :exec
+UPDATE accounts
+SET encumbered_balance = $2, version = version + 1, updated_at = $3
+WHERE id = $1
+`
+
+type UpdateAccountEncumberedParams struct {
+	ID                string             `json:"id"`
+	EncumberedBalance pgtype.Numeric     `json:"encumbered_balance"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAccountEncumbered(ctx context.Context, arg UpdateAccountEncumberedParams) error {
+	_, err := q.db.Exec(ctx, updateAccountEncumbered, arg.ID, arg.EncumberedBalance, arg.UpdatedAt)
 	return err
 }
