@@ -68,5 +68,8 @@ func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.AccountsFromDomain(accounts))
+	writeJSON(w, http.StatusOK, dto.ListAccountsResponse{
+		Accounts: dto.AccountsFromDomain(accounts),
+		Total:    int64(len(accounts)),
+	})
 }

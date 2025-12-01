@@ -4,20 +4,19 @@ import (
 	"time"
 
 	"github.com/iho/goledger/internal/domain"
-	"github.com/shopspring/decimal"
 )
 
 // AccountResponse represents an account in API responses.
 type AccountResponse struct {
-	ID                   string          `json:"id"`
-	Name                 string          `json:"name"`
-	Currency             string          `json:"currency"`
-	Balance              decimal.Decimal `json:"balance"`
-	Version              int64           `json:"version"`
-	AllowNegativeBalance bool            `json:"allow_negative_balance"`
-	AllowPositiveBalance bool            `json:"allow_positive_balance"`
-	CreatedAt            time.Time       `json:"created_at"`
-	UpdatedAt            time.Time       `json:"updated_at"`
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	Currency             string    `json:"currency"`
+	Balance              string    `json:"balance"`
+	Version              int64     `json:"version"`
+	AllowNegativeBalance bool      `json:"allow_negative_balance"`
+	AllowPositiveBalance bool      `json:"allow_positive_balance"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // AccountFromDomain converts domain account to response.
@@ -26,7 +25,7 @@ func AccountFromDomain(a *domain.Account) *AccountResponse {
 		ID:                   a.ID,
 		Name:                 a.Name,
 		Currency:             a.Currency,
-		Balance:              a.Balance,
+		Balance:              a.Balance.String(),
 		Version:              a.Version,
 		AllowNegativeBalance: a.AllowNegativeBalance,
 		AllowPositiveBalance: a.AllowPositiveBalance,
@@ -46,13 +45,13 @@ func AccountsFromDomain(accounts []*domain.Account) []*AccountResponse {
 
 // TransferResponse represents a transfer in API responses.
 type TransferResponse struct {
-	ID            string          `json:"id"`
-	FromAccountID string          `json:"from_account_id"`
-	ToAccountID   string          `json:"to_account_id"`
-	Amount        decimal.Decimal `json:"amount"`
-	CreatedAt     time.Time       `json:"created_at"`
-	EventAt       time.Time       `json:"event_at"`
-	Metadata      map[string]any  `json:"metadata,omitempty"`
+	ID            string         `json:"id"`
+	FromAccountID string         `json:"from_account_id"`
+	ToAccountID   string         `json:"to_account_id"`
+	Amount        string         `json:"amount"`
+	CreatedAt     time.Time      `json:"created_at"`
+	EventAt       time.Time      `json:"event_at"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 // TransferFromDomain converts domain transfer to response.
@@ -61,7 +60,7 @@ func TransferFromDomain(t *domain.Transfer) *TransferResponse {
 		ID:            t.ID,
 		FromAccountID: t.FromAccountID,
 		ToAccountID:   t.ToAccountID,
-		Amount:        t.Amount,
+		Amount:        t.Amount.String(),
 		CreatedAt:     t.CreatedAt,
 		EventAt:       t.EventAt,
 		Metadata:      t.Metadata,
@@ -79,14 +78,14 @@ func TransfersFromDomain(transfers []*domain.Transfer) []*TransferResponse {
 
 // EntryResponse represents an entry in API responses.
 type EntryResponse struct {
-	ID                     string          `json:"id"`
-	AccountID              string          `json:"account_id"`
-	TransferID             string          `json:"transfer_id"`
-	Amount                 decimal.Decimal `json:"amount"`
-	AccountPreviousBalance decimal.Decimal `json:"account_previous_balance"`
-	AccountCurrentBalance  decimal.Decimal `json:"account_current_balance"`
-	AccountVersion         int64           `json:"account_version"`
-	CreatedAt              time.Time       `json:"created_at"`
+	ID                     string    `json:"id"`
+	AccountID              string    `json:"account_id"`
+	TransferID             string    `json:"transfer_id"`
+	Amount                 string    `json:"amount"`
+	AccountPreviousBalance string    `json:"account_previous_balance"`
+	AccountCurrentBalance  string    `json:"account_current_balance"`
+	AccountVersion         int64     `json:"account_version"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 // EntryFromDomain converts domain entry to response.
@@ -95,9 +94,9 @@ func EntryFromDomain(e *domain.Entry) *EntryResponse {
 		ID:                     e.ID,
 		AccountID:              e.AccountID,
 		TransferID:             e.TransferID,
-		Amount:                 e.Amount,
-		AccountPreviousBalance: e.AccountPreviousBalance,
-		AccountCurrentBalance:  e.AccountCurrentBalance,
+		Amount:                 e.Amount.String(),
+		AccountPreviousBalance: e.AccountPreviousBalance.String(),
+		AccountCurrentBalance:  e.AccountCurrentBalance.String(),
 		AccountVersion:         e.AccountVersion,
 		CreatedAt:              e.CreatedAt,
 	}
@@ -110,6 +109,22 @@ func EntriesFromDomain(entries []*domain.Entry) []*EntryResponse {
 		result[i] = EntryFromDomain(e)
 	}
 	return result
+}
+
+// ListAccountsResponse represents a list of accounts.
+type ListAccountsResponse struct {
+	Accounts []*AccountResponse `json:"accounts"`
+	Total    int64              `json:"total"`
+}
+
+// ListTransfersResponse represents a list of transfers.
+type ListTransfersResponse struct {
+	Transfers []*TransferResponse `json:"transfers"`
+}
+
+// ListEntriesResponse represents a list of entries.
+type ListEntriesResponse struct {
+	Entries []*EntryResponse `json:"entries"`
 }
 
 // ErrorResponse represents an error in API responses.

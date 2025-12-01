@@ -27,22 +27,26 @@ func (r *CreateAccountRequest) ToUseCaseInput() usecase.CreateAccountInput {
 
 // CreateTransferRequest represents a request to create a transfer.
 type CreateTransferRequest struct {
-	FromAccountID string          `json:"from_account_id"`
-	ToAccountID   string          `json:"to_account_id"`
-	Amount        decimal.Decimal `json:"amount"`
-	EventAt       *time.Time      `json:"event_at,omitempty"`
-	Metadata      map[string]any  `json:"metadata,omitempty"`
+	FromAccountID string         `json:"from_account_id"`
+	ToAccountID   string         `json:"to_account_id"`
+	Amount        string         `json:"amount"`
+	EventAt       *time.Time     `json:"event_at,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 // ToUseCaseInput converts to use case input.
-func (r *CreateTransferRequest) ToUseCaseInput() usecase.CreateTransferInput {
+func (r *CreateTransferRequest) ToUseCaseInput() (usecase.CreateTransferInput, error) {
+	amount, err := decimal.NewFromString(r.Amount)
+	if err != nil {
+		return usecase.CreateTransferInput{}, err
+	}
 	return usecase.CreateTransferInput{
 		FromAccountID: r.FromAccountID,
 		ToAccountID:   r.ToAccountID,
-		Amount:        r.Amount,
+		Amount:        amount,
 		EventAt:       r.EventAt,
 		Metadata:      r.Metadata,
-	}
+	}, nil
 }
 
 // CreateBatchTransferRequest represents a request to create multiple transfers.
@@ -54,26 +58,30 @@ type CreateBatchTransferRequest struct {
 
 // TransferItem represents a single transfer in a batch.
 type TransferItem struct {
-	FromAccountID string          `json:"from_account_id"`
-	ToAccountID   string          `json:"to_account_id"`
-	Amount        decimal.Decimal `json:"amount"`
+	FromAccountID string `json:"from_account_id"`
+	ToAccountID   string `json:"to_account_id"`
+	Amount        string `json:"amount"`
 }
 
 // ToUseCaseInput converts to use case input.
-func (r *CreateBatchTransferRequest) ToUseCaseInput() usecase.CreateBatchTransferInput {
+func (r *CreateBatchTransferRequest) ToUseCaseInput() (usecase.CreateBatchTransferInput, error) {
 	transfers := make([]usecase.CreateTransferInput, len(r.Transfers))
 	for i, t := range r.Transfers {
+		amount, err := decimal.NewFromString(t.Amount)
+		if err != nil {
+			return usecase.CreateBatchTransferInput{}, err
+		}
 		transfers[i] = usecase.CreateTransferInput{
 			FromAccountID: t.FromAccountID,
 			ToAccountID:   t.ToAccountID,
-			Amount:        t.Amount,
+			Amount:        amount,
 		}
 	}
 	return usecase.CreateBatchTransferInput{
 		Transfers: transfers,
 		EventAt:   r.EventAt,
 		Metadata:  r.Metadata,
-	}
+	}, nil
 }
 
 // PaginationRequest represents pagination parameters.

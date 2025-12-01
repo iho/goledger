@@ -30,7 +30,13 @@ test:
 
 # Run integration tests (requires Docker)
 test-integration: docker-up
-	go test -v -race -tags=integration ./tests/integration/...
+	sleep 2
+	go test -v -race ./tests/integration/...
+
+# Run tests in Docker
+test-docker:
+	docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+	docker-compose -f docker-compose.test.yml down -v
 
 # Run all tests with coverage
 test-coverage:

@@ -27,7 +27,13 @@ func (h *TransferHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transfer, err := h.transferUC.CreateTransfer(r.Context(), req.ToUseCaseInput())
+	input, err := req.ToUseCaseInput()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid amount", err.Error())
+		return
+	}
+
+	transfer, err := h.transferUC.CreateTransfer(r.Context(), input)
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to create transfer", err.Error())
@@ -45,7 +51,13 @@ func (h *TransferHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transfers, err := h.transferUC.CreateBatchTransfer(r.Context(), req.ToUseCaseInput())
+	input, err := req.ToUseCaseInput()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid amount", err.Error())
+		return
+	}
+
+	transfers, err := h.transferUC.CreateBatchTransfer(r.Context(), input)
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to create transfers", err.Error())

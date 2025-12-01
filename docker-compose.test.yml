@@ -1,0 +1,46 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: goledger-postgres-test
+    environment:
+      POSTGRES_DB: ledger_test
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./internal/infrastructure/postgres/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: goledger-redis-test
+    ports:
+      - "6380:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    container_name: goledger-test-runner
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ledger:ledger@postgres-test:5432/ledger_test?sslmode=disable
+      REDIS_URL: redis://redis-test:6379
