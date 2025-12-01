@@ -1,4 +1,3 @@
-
 package usecase
 
 import (
@@ -11,6 +10,11 @@ import (
 	"github.com/iho/goledger/internal/domain"
 )
 
+// Retrier defines retry behavior for operations.
+type Retrier interface {
+	Retry(ctx context.Context, operation func() error) error
+}
+
 // TransferUseCase handles transfer business logic.
 type TransferUseCase struct {
 	txManager    TransactionManager
@@ -18,6 +22,7 @@ type TransferUseCase struct {
 	transferRepo TransferRepository
 	entryRepo    EntryRepository
 	idGen        IDGenerator
+	retrier      Retrier
 }
 
 // NewTransferUseCase creates a new TransferUseCase.
@@ -34,7 +39,21 @@ func NewTransferUseCase(
 		transferRepo: transferRepo,
 		entryRepo:    entryRepo,
 		idGen:        idGen,
+		retrier:      &noopRetrier{},
 	}
+}
+
+// WithRetrier sets a custom retrier for the use case.
+func (uc *TransferUseCase) WithRetrier(r Retrier) *TransferUseCase {
+	uc.retrier = r
+	return uc
+}
+
+// noopRetrier is a no-op retrier that just executes the operation once.
+type noopRetrier struct{}
+
+func (r *noopRetrier) Retry(ctx context.Context, operation func() error) error {
+	return operation()
 }
 
 // CreateTransferInput represents input for creating a transfer.
@@ -84,7 +103,24 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	accountIDs := uc.collectUniqueAccountIDs(input.Transfers)
 	sort.Strings(accountIDs)
 
-	// 2. Begin transaction
+	// Execute with retry for deadlock/serialization errors
+	var transfers []*domain.Transfer
+	err := uc.retrier.Retry(ctx, func() error {
+		var txErr error
+		transfers, txErr = uc.executeTransferTransaction(ctx, input, accountIDs)
+		return txErr
+	})
+
+	return transfers, err
+}
+
+// executeTransferTransaction runs the transfer in a single transaction.
+func (uc *TransferUseCase) executeTransferTransaction(
+	ctx context.Context,
+	input CreateBatchTransferInput,
+	accountIDs []string,
+) ([]*domain.Transfer, error) {
+	// Begin transaction
 	tx, err := uc.txManager.Begin(ctx)
 	if err != nil {
 		return nil, err

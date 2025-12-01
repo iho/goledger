@@ -64,18 +64,23 @@ func main() {
 	accountRepo := postgresRepo.NewAccountRepository(pool)
 	transferRepo := postgresRepo.NewTransferRepository(pool)
 	entryRepo := postgresRepo.NewEntryRepository(pool)
+	ledgerRepo := postgresRepo.NewLedgerRepository(pool)
 	idempotencyStore := redisRepo.NewIdempotencyStore(redisClient)
 	idGen := postgresRepo.NewULIDGenerator()
 
-	// Initialize use cases
+	// Initialize use cases with retry support
+	retrier := postgresRepo.NewRetrier()
 	accountUC := usecase.NewAccountUseCase(accountRepo, idGen)
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen).
+		WithRetrier(retrier)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
+	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
 
 	// Initialize handlers
 	accountHandler := handler.NewAccountHandler(accountUC)
 	transferHandler := handler.NewTransferHandler(transferUC)
 	entryHandler := handler.NewEntryHandler(entryUC)
+	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
 	healthHandler := handler.NewHealthHandler(pool, redisClient)
 
 	// Create router
@@ -84,6 +89,7 @@ func main() {
 		TransferHandler:  transferHandler,
 		EntryHandler:     entryHandler,
 		HealthHandler:    healthHandler,
+		LedgerHandler:    ledgerHandler,
 		IdempotencyStore: idempotencyStore,
 	})
 

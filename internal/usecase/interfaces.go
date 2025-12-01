@@ -1,4 +1,3 @@
-
 package usecase
 
 import (
@@ -33,6 +32,11 @@ type EntryRepository interface {
 	GetByTransfer(ctx context.Context, transferID string) ([]*domain.Entry, error)
 	GetByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Entry, error)
 	GetBalanceAtTime(ctx context.Context, accountID string, at time.Time) (decimal.Decimal, error)
+}
+
+// LedgerRepository defines data access for ledger-wide operations.
+type LedgerRepository interface {
+	CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error)
 }
 
 // Transaction represents a database transaction.

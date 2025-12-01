@@ -1,4 +1,3 @@
-
 package http
 
 import (
@@ -20,6 +19,7 @@ type RouterConfig struct {
 	TransferHandler  *handler.TransferHandler
 	EntryHandler     *handler.EntryHandler
 	HealthHandler    *handler.HealthHandler
+	LedgerHandler    *handler.LedgerHandler
 	IdempotencyStore usecase.IdempotencyStore
 }
 
@@ -46,6 +46,9 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			idempotencyMiddleware := middleware.NewIdempotencyMiddleware(cfg.IdempotencyStore)
 			r.Use(idempotencyMiddleware.Wrap)
 		}
+
+		// Ledger endpoints
+		r.Get("/ledger/consistency", cfg.LedgerHandler.CheckConsistency)
 
 		// Accounts
 		r.Route("/accounts", func(r chi.Router) {

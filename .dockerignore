@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bin/
+*.out
+*.html
+*.test
+
+# Go dependency directories
+vendor/
+
+# Editor/IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile
+Dockerfile.*
+
+# Local configuration
+.env
+.env.local
+
+# Tools
+.golangci.yml
+.air.toml
+Makefile
+README.md
+IMPLEMENTATION_PLAN.md
+how payment processing works_ golang java.md
+pgledger.sql
