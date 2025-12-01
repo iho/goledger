@@ -11,6 +11,13 @@ all: build
 sqlc:
 	cd internal/infrastructure/postgres && sqlc generate
 
+# Generate mocks using gomock
+mocks:
+	mockgen -source=internal/usecase/interfaces.go -destination=internal/usecase/mocks/mock_interfaces.go -package=mocks
+
+# Generate all code (sqlc + mocks)
+generate: sqlc mocks
+
 # Download dependencies
 deps:
 	go mod download

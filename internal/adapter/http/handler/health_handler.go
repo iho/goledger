@@ -34,13 +34,15 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Check PostgreSQL
-	if err := h.pool.Ping(ctx); err != nil {
+	err := h.pool.Ping(ctx)
+	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "postgres unhealthy", err.Error())
 		return
 	}
 
 	// Check Redis
-	if err := h.redisClient.Ping(ctx).Err(); err != nil {
+	err = h.redisClient.Ping(ctx).Err()
+	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "redis unhealthy", err.Error())
 		return
 	}

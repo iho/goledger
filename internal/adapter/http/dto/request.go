@@ -1,10 +1,12 @@
+
 package dto
 
 import (
 	"time"
 
-	"github.com/iho/goledger/internal/usecase"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/usecase"
 )
 
 // CreateAccountRequest represents a request to create an account.
@@ -27,11 +29,11 @@ func (r *CreateAccountRequest) ToUseCaseInput() usecase.CreateAccountInput {
 
 // CreateTransferRequest represents a request to create a transfer.
 type CreateTransferRequest struct {
+	EventAt       *time.Time     `json:"event_at,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 	FromAccountID string         `json:"from_account_id"`
 	ToAccountID   string         `json:"to_account_id"`
 	Amount        string         `json:"amount"`
-	EventAt       *time.Time     `json:"event_at,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 // ToUseCaseInput converts to use case input.
@@ -40,6 +42,7 @@ func (r *CreateTransferRequest) ToUseCaseInput() (usecase.CreateTransferInput, e
 	if err != nil {
 		return usecase.CreateTransferInput{}, err
 	}
+
 	return usecase.CreateTransferInput{
 		FromAccountID: r.FromAccountID,
 		ToAccountID:   r.ToAccountID,
@@ -51,9 +54,9 @@ func (r *CreateTransferRequest) ToUseCaseInput() (usecase.CreateTransferInput, e
 
 // CreateBatchTransferRequest represents a request to create multiple transfers.
 type CreateBatchTransferRequest struct {
-	Transfers []TransferItem `json:"transfers"`
 	EventAt   *time.Time     `json:"event_at,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
+	Transfers []TransferItem `json:"transfers"`
 }
 
 // TransferItem represents a single transfer in a batch.
@@ -71,12 +74,14 @@ func (r *CreateBatchTransferRequest) ToUseCaseInput() (usecase.CreateBatchTransf
 		if err != nil {
 			return usecase.CreateBatchTransferInput{}, err
 		}
+
 		transfers[i] = usecase.CreateTransferInput{
 			FromAccountID: t.FromAccountID,
 			ToAccountID:   t.ToAccountID,
 			Amount:        amount,
 		}
 	}
+
 	return usecase.CreateBatchTransferInput{
 		Transfers: transfers,
 		EventAt:   r.EventAt,

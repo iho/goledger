@@ -1,14 +1,16 @@
+
 package postgres
 
 import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
+
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 	"github.com/iho/goledger/internal/usecase"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/shopspring/decimal"
 )
 
 // EntryRepository implements usecase.EntryRepository.
@@ -40,6 +42,7 @@ func (r *EntryRepository) Create(ctx context.Context, tx usecase.Transaction, en
 		AccountVersion:         entry.AccountVersion,
 		CreatedAt:              timeToPgTimestamptz(entry.CreatedAt),
 	})
+
 	return err
 }
 
@@ -54,6 +57,7 @@ func (r *EntryRepository) GetByTransfer(ctx context.Context, transferID string) 
 	for _, row := range rows {
 		entries = append(entries, rowToEntry(row))
 	}
+
 	return entries, nil
 }
 
@@ -81,6 +85,7 @@ func (r *EntryRepository) GetByAccount(ctx context.Context, accountID string, li
 			CreatedAt:              row.CreatedAt.Time,
 		})
 	}
+
 	return entries, nil
 }
 
@@ -93,6 +98,7 @@ func (r *EntryRepository) GetBalanceAtTime(ctx context.Context, accountID string
 	if err != nil {
 		return decimal.Zero, err
 	}
+
 	return numericToDecimal(balance), nil
 }
 

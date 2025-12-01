@@ -1,11 +1,13 @@
+
 package usecase
 
 import (
 	"context"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
 )
 
 // EntryUseCase handles entry business logic.
@@ -32,9 +34,11 @@ func (uc *EntryUseCase) GetEntriesByAccount(ctx context.Context, input GetEntrie
 	if input.Limit <= 0 {
 		input.Limit = 20
 	}
+
 	if input.Limit > 100 {
 		input.Limit = 100
 	}
+
 	return uc.entryRepo.GetByAccount(ctx, input.AccountID, input.Limit, input.Offset)
 }
 

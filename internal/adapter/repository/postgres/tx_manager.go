@@ -1,11 +1,13 @@
+
 package postgres
 
 import (
 	"context"
 
-	"github.com/iho/goledger/internal/usecase"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/iho/goledger/internal/usecase"
 )
 
 // TxManager implements usecase.TransactionManager.
@@ -24,6 +26,7 @@ func (m *TxManager) Begin(ctx context.Context) (usecase.Transaction, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Tx{tx: tx}, nil
 }
 

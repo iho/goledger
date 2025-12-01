@@ -1,3 +1,4 @@
+
 package testutil
 
 import (
@@ -6,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
-	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 )
 
 // TestDB provides isolated test database connections.
@@ -57,6 +59,7 @@ func (db *TestDB) Cleanup() {
 // TruncateAll removes all data from tables.
 func (db *TestDB) TruncateAll(ctx context.Context) {
 	db.t.Helper()
+
 	_, err := db.Pool.Exec(ctx, `
 		TRUNCATE TABLE entries CASCADE;
 		TRUNCATE TABLE transfers CASCADE;
@@ -75,6 +78,7 @@ func (db *TestDB) CreateTestAccount(ctx context.Context, name, currency string, 
 	id := ulid.Make().String()
 
 	var balance pgtype.Numeric
+
 	_ = balance.Scan("0")
 
 	ts := pgtype.Timestamptz{Time: now, Valid: true}
@@ -115,6 +119,7 @@ func (db *TestDB) CreateTestAccountWithBalance(ctx context.Context, name, curren
 	id := ulid.Make().String()
 
 	var numericBalance pgtype.Numeric
+
 	_ = numericBalance.Scan(balance.String())
 
 	ts := pgtype.Timestamptz{Time: now, Valid: true}

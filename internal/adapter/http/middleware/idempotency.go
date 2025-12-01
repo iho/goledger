@@ -1,3 +1,4 @@
+
 package middleware
 
 import (
@@ -51,6 +52,7 @@ func (m *IdempotencyMiddleware) Wrap(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Idempotency-Replay", "true")
 			w.Write(cachedResponse)
+
 			return
 		}
 
@@ -71,8 +73,8 @@ func (m *IdempotencyMiddleware) Wrap(next http.Handler) http.Handler {
 
 type responseRecorder struct {
 	http.ResponseWriter
-	statusCode int
 	body       *bytes.Buffer
+	statusCode int
 }
 
 func (r *responseRecorder) Write(b []byte) (int, error) {

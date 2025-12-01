@@ -1,7 +1,9 @@
+
 package redis
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -30,7 +32,8 @@ func (s *IdempotencyStore) CheckAndSet(ctx context.Context, key string, response
 	if err == nil {
 		return true, existing, nil
 	}
-	if err != redis.Nil {
+
+	if !errors.Is(err, redis.Nil) {
 		return false, nil, err
 	}
 
@@ -46,12 +49,14 @@ func (s *IdempotencyStore) CheckAndSet(ctx context.Context, key string, response
 		if err != nil {
 			return false, nil, err
 		}
+
 		if !set {
 			// Another request got there first
 			existing, err := s.client.Get(ctx, fullKey).Bytes()
-			if err != nil && err != redis.Nil {
+			if err != nil && !errors.Is(err, redis.Nil) {
 				return false, nil, err
 			}
+
 			return true, existing, nil
 		}
 	}

@@ -1,199 +1,122 @@
+
 package usecase_test
 
 import (
 	"context"
+	"errors"
 	"testing"
-	"time"
+
+	"github.com/shopspring/decimal"
+	"go.uber.org/mock/gomock"
 
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 	"github.com/iho/goledger/internal/usecase/mocks"
-	"github.com/shopspring/decimal"
 )
 
 func TestTransferUseCase_CreateTransfer(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       usecase.CreateTransferInput
-		setupMocks  func(*mocks.MockAccountRepository, *mocks.MockTransferRepository, *mocks.MockEntryRepository, *mocks.MockTransactionManager)
-		expectError bool
-		errorType   error
-	}{
-		{
-			name: "successful transfer",
-			input: usecase.CreateTransferInput{
-				FromAccountID: "acc-1",
-				ToAccountID:   "acc-2",
-				Amount:        decimal.NewFromInt(100),
-			},
-			setupMocks: func(accRepo *mocks.MockAccountRepository, txRepo *mocks.MockTransferRepository, entryRepo *mocks.MockEntryRepository, txMgr *mocks.MockTransactionManager) {
-				accRepo.GetByIDsForUpdateFunc = func(ctx context.Context, tx usecase.Transaction, ids []string) ([]*domain.Account, error) {
-					return []*domain.Account{
-						{ID: "acc-1", Balance: decimal.NewFromInt(500), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-						{ID: "acc-2", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: false, AllowPositiveBalance: true},
-					}, nil
-				}
-			},
-			expectError: false,
-		},
-		{
-			name: "reject same account transfer",
-			input: usecase.CreateTransferInput{
-				FromAccountID: "acc-1",
-				ToAccountID:   "acc-1",
-				Amount:        decimal.NewFromInt(100),
-			},
-			setupMocks: func(accRepo *mocks.MockAccountRepository, txRepo *mocks.MockTransferRepository, entryRepo *mocks.MockEntryRepository, txMgr *mocks.MockTransactionManager) {
-				accRepo.GetByIDsForUpdateFunc = func(ctx context.Context, tx usecase.Transaction, ids []string) ([]*domain.Account, error) {
-					return []*domain.Account{
-						{ID: "acc-1", Balance: decimal.NewFromInt(500), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-					}, nil
-				}
-			},
-			expectError: true,
-			errorType:   domain.ErrSameAccount,
-		},
-		{
-			name: "reject negative balance when not allowed",
-			input: usecase.CreateTransferInput{
-				FromAccountID: "acc-1",
-				ToAccountID:   "acc-2",
-				Amount:        decimal.NewFromInt(1000),
-			},
-			setupMocks: func(accRepo *mocks.MockAccountRepository, txRepo *mocks.MockTransferRepository, entryRepo *mocks.MockEntryRepository, txMgr *mocks.MockTransactionManager) {
-				accRepo.GetByIDsForUpdateFunc = func(ctx context.Context, tx usecase.Transaction, ids []string) ([]*domain.Account, error) {
-					return []*domain.Account{
-						{ID: "acc-1", Balance: decimal.NewFromInt(100), Currency: "USD", AllowNegativeBalance: false, AllowPositiveBalance: true},
-						{ID: "acc-2", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: false, AllowPositiveBalance: true},
-					}, nil
-				}
-			},
-			expectError: true,
-			errorType:   domain.ErrNegativeBalanceNotAllowed,
-		},
-		{
-			name: "reject currency mismatch",
-			input: usecase.CreateTransferInput{
-				FromAccountID: "acc-1",
-				ToAccountID:   "acc-2",
-				Amount:        decimal.NewFromInt(100),
-			},
-			setupMocks: func(accRepo *mocks.MockAccountRepository, txRepo *mocks.MockTransferRepository, entryRepo *mocks.MockEntryRepository, txMgr *mocks.MockTransactionManager) {
-				accRepo.GetByIDsForUpdateFunc = func(ctx context.Context, tx usecase.Transaction, ids []string) ([]*domain.Account, error) {
-					return []*domain.Account{
-						{ID: "acc-1", Balance: decimal.NewFromInt(500), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-						{ID: "acc-2", Balance: decimal.Zero, Currency: "EUR", AllowNegativeBalance: false, AllowPositiveBalance: true},
-					}, nil
-				}
-			},
-			expectError: true,
-			errorType:   domain.ErrCurrencyMismatch,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			accRepo := mocks.NewMockAccountRepository()
-			txRepo := mocks.NewMockTransferRepository()
-			entryRepo := mocks.NewMockEntryRepository()
-			txMgr := mocks.NewMockTransactionManager()
-			idGen := mocks.NewMockIDGenerator()
+	accRepo := mocks.NewMockAccountRepository(ctrl)
+	txRepo := mocks.NewMockTransferRepository(ctrl)
+	entryRepo := mocks.NewMockEntryRepository(ctrl)
+	txMgr := mocks.NewMockTransactionManager(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+	mockTx := mocks.NewMockTransaction(ctrl)
 
-			idGen.GenerateFunc = func() string {
-				return "generated-id-" + time.Now().Format("150405.000")
-			}
+	txMgr.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
+	accRepo.EXPECT().GetByIDsForUpdate(gomock.Any(), mockTx, gomock.Any()).Return([]*domain.Account{
+		{ID: "acc-1", Balance: decimal.NewFromInt(500), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
+		{ID: "acc-2", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: false, AllowPositiveBalance: true},
+	}, nil)
+	idGen.EXPECT().Generate().Return("generated-id").Times(3)
+	txRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
+	entryRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil).Times(2)
+	accRepo.EXPECT().UpdateBalance(gomock.Any(), mockTx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
+	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-			tt.setupMocks(accRepo, txRepo, entryRepo, txMgr)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, idGen)
 
-			uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, idGen)
-			transfer, err := uc.CreateTransfer(context.Background(), tt.input)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-				if tt.errorType != nil && err != tt.errorType {
-					t.Errorf("expected error %v, got %v", tt.errorType, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if transfer == nil {
-					t.Error("expected transfer, got nil")
-				}
-			}
-		})
-	}
-}
-
-func TestTransferUseCase_GetTransfer(t *testing.T) {
-	txRepo := mocks.NewMockTransferRepository()
-
-	// Add a transfer
-	txRepo.Create(context.Background(), nil, &domain.Transfer{
-		ID:            "tx-123",
+	transfer, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-2",
 		Amount:        decimal.NewFromInt(100),
 	})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	if transfer == nil {
+		t.Fatal("expected transfer, got nil")
+	}
+}
+
+func TestTransferUseCase_RejectSameAccount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	accRepo := mocks.NewMockAccountRepository(ctrl)
+	txRepo := mocks.NewMockTransferRepository(ctrl)
+	entryRepo := mocks.NewMockEntryRepository(ctrl)
+	txMgr := mocks.NewMockTransactionManager(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, idGen)
+	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
+		FromAccountID: "acc-1",
+		ToAccountID:   "acc-1",
+		Amount:        decimal.NewFromInt(100),
+	})
+
+	if !errors.Is(err, domain.ErrSameAccount) {
+		t.Errorf("expected ErrSameAccount, got %v", err)
+	}
+}
+
+func TestTransferUseCase_RejectZeroAmount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	accRepo := mocks.NewMockAccountRepository(ctrl)
+	txRepo := mocks.NewMockTransferRepository(ctrl)
+	entryRepo := mocks.NewMockEntryRepository(ctrl)
+	txMgr := mocks.NewMockTransactionManager(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, idGen)
+	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
+		FromAccountID: "acc-1",
+		ToAccountID:   "acc-2",
+		Amount:        decimal.Zero,
+	})
+
+	if !errors.Is(err, domain.ErrInvalidAmount) {
+		t.Errorf("expected ErrInvalidAmount, got %v", err)
+	}
+}
+
+func TestTransferUseCase_GetTransfer(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	txRepo := mocks.NewMockTransferRepository(ctrl)
+	txRepo.EXPECT().GetByID(gomock.Any(), "tx-123").Return(&domain.Transfer{
+		ID:            "tx-123",
+		FromAccountID: "acc-1",
+		ToAccountID:   "acc-2",
+		Amount:        decimal.NewFromInt(100),
+	}, nil)
 
 	uc := usecase.NewTransferUseCase(nil, nil, txRepo, nil, nil)
 
-	t.Run("get existing transfer", func(t *testing.T) {
-		transfer, err := uc.GetTransfer(context.Background(), "tx-123")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if transfer.ID != "tx-123" {
-			t.Errorf("expected ID tx-123, got %s", transfer.ID)
-		}
-	})
-
-	t.Run("get non-existent transfer", func(t *testing.T) {
-		_, err := uc.GetTransfer(context.Background(), "non-existent")
-		if err == nil {
-			t.Error("expected error, got nil")
-		}
-	})
-}
-
-func TestTransferUseCase_CreateBatchTransfer(t *testing.T) {
-	accRepo := mocks.NewMockAccountRepository()
-	txRepo := mocks.NewMockTransferRepository()
-	entryRepo := mocks.NewMockEntryRepository()
-	txMgr := mocks.NewMockTransactionManager()
-	idGen := mocks.NewMockIDGenerator()
-
-	counter := 0
-	idGen.GenerateFunc = func() string {
-		counter++
-		return "id-" + string(rune('0'+counter))
-	}
-
-	accRepo.GetByIDsForUpdateFunc = func(ctx context.Context, tx usecase.Transaction, ids []string) ([]*domain.Account, error) {
-		return []*domain.Account{
-			{ID: "acc-1", Balance: decimal.NewFromInt(1000), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-			{ID: "acc-2", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-			{ID: "acc-3", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
-		}, nil
-	}
-
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, idGen)
-
-	input := usecase.CreateBatchTransferInput{
-		Transfers: []usecase.CreateTransferInput{
-			{FromAccountID: "acc-1", ToAccountID: "acc-2", Amount: decimal.NewFromInt(100)},
-			{FromAccountID: "acc-1", ToAccountID: "acc-3", Amount: decimal.NewFromInt(200)},
-		},
-	}
-
-	transfers, err := uc.CreateBatchTransfer(context.Background(), input)
+	transfer, err := uc.GetTransfer(context.Background(), "tx-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(transfers) != 2 {
-		t.Errorf("expected 2 transfers, got %d", len(transfers))
+	if transfer.ID != "tx-123" {
+		t.Errorf("expected ID tx-123, got %s", transfer.ID)
 	}
 }

@@ -1,3 +1,4 @@
+
 package integration
 
 import (
@@ -25,8 +26,10 @@ func TestAccountCreation(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Cleanup()
+
 	testDB.TruncateAll(ctx)
 
 	// Setup
@@ -41,6 +44,7 @@ func TestAccountCreation(t *testing.T) {
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379"
 	}
+
 	redisClient, err := infraredis.NewClient(ctx, redisURL)
 	if err != nil {
 		t.Fatalf("failed to connect to redis: %v", err)
@@ -76,6 +80,7 @@ func TestAccountCreation(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/accounts", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -85,16 +90,19 @@ func TestAccountCreation(t *testing.T) {
 		}
 
 		var resp dto.AccountResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
 			t.Fatalf("failed to parse response: %v", err)
 		}
 
 		if resp.Name != req.Name {
 			t.Errorf("expected name %q, got %q", req.Name, resp.Name)
 		}
+
 		if resp.Currency != req.Currency {
 			t.Errorf("expected currency %q, got %q", req.Currency, resp.Currency)
 		}
+
 		if resp.Balance != "0" {
 			t.Errorf("expected balance 0, got %s", resp.Balance)
 		}
@@ -104,7 +112,7 @@ func TestAccountCreation(t *testing.T) {
 		// First create an account
 		account := testDB.CreateTestAccount(ctx, "get-test", "EUR", false, true)
 
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts/"+account.ID, nil)
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts/"+account.ID, http.NoBody)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -114,7 +122,8 @@ func TestAccountCreation(t *testing.T) {
 		}
 
 		var resp dto.AccountResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
 			t.Fatalf("failed to parse response: %v", err)
 		}
 
@@ -124,7 +133,7 @@ func TestAccountCreation(t *testing.T) {
 	})
 
 	t.Run("get non-existent account returns 404", func(t *testing.T) {
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts/non-existent-id", nil)
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts/non-existent-id", http.NoBody)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -139,7 +148,7 @@ func TestAccountCreation(t *testing.T) {
 		testDB.CreateTestAccount(ctx, "list-1", "USD", true, true)
 		testDB.CreateTestAccount(ctx, "list-2", "USD", true, true)
 
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts?limit=10&offset=0", nil)
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/accounts?limit=10&offset=0", http.NoBody)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -149,7 +158,8 @@ func TestAccountCreation(t *testing.T) {
 		}
 
 		var resp dto.ListAccountsResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
 			t.Fatalf("failed to parse response: %v", err)
 		}
 

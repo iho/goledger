@@ -1,3 +1,4 @@
+
 package handler
 
 import (
@@ -55,9 +56,11 @@ func parseIntQuery(r *http.Request, key string, defaultValue int) int {
 	if val == "" {
 		return defaultValue
 	}
+
 	i, err := strconv.Atoi(val)
 	if err != nil {
 		return defaultValue
 	}
+
 	return i
 }

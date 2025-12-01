@@ -1,3 +1,4 @@
+
 package domain
 
 import (
@@ -8,6 +9,8 @@ import (
 
 // Account represents a ledger account that can hold a balance.
 type Account struct {
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 	ID                   string
 	Name                 string
 	Currency             string
@@ -15,8 +18,6 @@ type Account struct {
 	Version              int64
 	AllowNegativeBalance bool
 	AllowPositiveBalance bool
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
 }
 
 // ValidateDebit checks if account can be debited by amount.
@@ -25,6 +26,7 @@ func (a *Account) ValidateDebit(amount decimal.Decimal) error {
 	if !a.AllowNegativeBalance && newBalance.IsNegative() {
 		return ErrNegativeBalanceNotAllowed
 	}
+
 	return nil
 }
 
@@ -34,6 +36,7 @@ func (a *Account) ValidateCredit(amount decimal.Decimal) error {
 	if !a.AllowPositiveBalance && newBalance.IsPositive() {
 		return ErrPositiveBalanceNotAllowed
 	}
+
 	return nil
 }
 

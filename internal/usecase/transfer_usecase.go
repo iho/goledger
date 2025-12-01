@@ -1,3 +1,4 @@
+
 package usecase
 
 import (
@@ -5,8 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
 )
 
 // TransferUseCase handles transfer business logic.
@@ -37,18 +39,18 @@ func NewTransferUseCase(
 
 // CreateTransferInput represents input for creating a transfer.
 type CreateTransferInput struct {
+	EventAt       *time.Time
+	Metadata      map[string]any
 	FromAccountID string
 	ToAccountID   string
 	Amount        decimal.Decimal
-	EventAt       *time.Time
-	Metadata      map[string]any
 }
 
 // CreateBatchTransferInput represents input for creating multiple transfers atomically.
 type CreateBatchTransferInput struct {
-	Transfers []CreateTransferInput
 	EventAt   *time.Time
 	Metadata  map[string]any
+	Transfers []CreateTransferInput
 }
 
 // CreateTransfer creates a single transfer.
@@ -61,11 +63,23 @@ func (uc *TransferUseCase) CreateTransfer(ctx context.Context, input CreateTrans
 	if err != nil {
 		return nil, err
 	}
+
 	return result[0], nil
 }
 
 // CreateBatchTransfer creates multiple transfers atomically.
 func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input CreateBatchTransferInput) ([]*domain.Transfer, error) {
+	// 0. Validate inputs before starting transaction
+	for _, ti := range input.Transfers {
+		if ti.FromAccountID == ti.ToAccountID {
+			return nil, domain.ErrSameAccount
+		}
+
+		if ti.Amount.LessThanOrEqual(decimal.Zero) {
+			return nil, domain.ErrInvalidAmount
+		}
+	}
+
 	// 1. Collect and sort unique account IDs (DEADLOCK PREVENTION)
 	accountIDs := uc.collectUniqueAccountIDs(input.Transfers)
 	sort.Strings(accountIDs)
@@ -91,6 +105,7 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 
 	// 4. Process each transfer
 	now := time.Now().UTC()
+
 	eventAt := now
 	if input.EventAt != nil {
 		eventAt = *input.EventAt
@@ -107,6 +122,7 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 		if err != nil {
 			return nil, err
 		}
+
 		transfers = append(transfers, transfer)
 	}
 
@@ -139,12 +155,14 @@ func (uc *TransferUseCase) processTransfer(
 	}
 
 	// Validate debit
-	if err := fromAccount.ValidateDebit(input.Amount); err != nil {
+	err := fromAccount.ValidateDebit(input.Amount)
+	if err != nil {
 		return nil, err
 	}
 
 	// Validate credit
-	if err := toAccount.ValidateCredit(input.Amount); err != nil {
+	err = toAccount.ValidateCredit(input.Amount)
+	if err != nil {
 		return nil, err
 	}
 
@@ -159,11 +177,13 @@ func (uc *TransferUseCase) processTransfer(
 		Metadata:      metadata,
 	}
 
-	if err := transfer.Validate(); err != nil {
+	err = transfer.Validate()
+	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.transferRepo.Create(ctx, tx, transfer); err != nil {
+	err = uc.transferRepo.Create(ctx, tx, transfer)
+	if err != nil {
 		return nil, err
 	}
 
@@ -180,14 +200,17 @@ func (uc *TransferUseCase) processTransfer(
 		CreatedAt:              now,
 	}
 
-	if err := uc.entryRepo.Create(ctx, tx, fromEntry); err != nil {
+	err = uc.entryRepo.Create(ctx, tx, fromEntry)
+	if err != nil {
 		return nil, err
 	}
 
 	// Update from account balance
-	if err := uc.accountRepo.UpdateBalance(ctx, tx, fromAccount.ID, fromNewBalance, now); err != nil {
+	err = uc.accountRepo.UpdateBalance(ctx, tx, fromAccount.ID, fromNewBalance, now)
+	if err != nil {
 		return nil, err
 	}
+
 	fromAccount.Balance = fromNewBalance
 	fromAccount.Version++
 
@@ -204,14 +227,17 @@ func (uc *TransferUseCase) processTransfer(
 		CreatedAt:              now,
 	}
 
-	if err := uc.entryRepo.Create(ctx, tx, toEntry); err != nil {
+	err = uc.entryRepo.Create(ctx, tx, toEntry)
+	if err != nil {
 		return nil, err
 	}
 
 	// Update to account balance
-	if err := uc.accountRepo.UpdateBalance(ctx, tx, toAccount.ID, toNewBalance, now); err != nil {
+	err = uc.accountRepo.UpdateBalance(ctx, tx, toAccount.ID, toNewBalance, now)
+	if err != nil {
 		return nil, err
 	}
+
 	toAccount.Balance = toNewBalance
 	toAccount.Version++
 
@@ -235,25 +261,30 @@ func (uc *TransferUseCase) ListTransfersByAccount(ctx context.Context, input Lis
 	if input.Limit <= 0 {
 		input.Limit = 20
 	}
+
 	if input.Limit > 100 {
 		input.Limit = 100
 	}
+
 	return uc.transferRepo.ListByAccount(ctx, input.AccountID, input.Limit, input.Offset)
 }
 
 func (uc *TransferUseCase) collectUniqueAccountIDs(transfers []CreateTransferInput) []string {
 	seen := make(map[string]bool)
+
 	var ids []string
 	for _, t := range transfers {
 		if !seen[t.FromAccountID] {
 			seen[t.FromAccountID] = true
 			ids = append(ids, t.FromAccountID)
 		}
+
 		if !seen[t.ToAccountID] {
 			seen[t.ToAccountID] = true
 			ids = append(ids, t.ToAccountID)
 		}
 	}
+
 	return ids
 }
 
@@ -262,5 +293,6 @@ func (uc *TransferUseCase) buildAccountMap(accounts []*domain.Account) map[strin
 	for _, a := range accounts {
 		m[a.ID] = a
 	}
+
 	return m
 }

@@ -1,3 +1,4 @@
+
 package postgres
 
 import (
@@ -5,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 	"github.com/iho/goledger/internal/usecase"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TransferRepository implements usecase.TransferRepository.
@@ -34,6 +36,7 @@ func (r *TransferRepository) Create(ctx context.Context, tx usecase.Transaction,
 	var metadata []byte
 	if transfer.Metadata != nil {
 		var err error
+
 		metadata, err = json.Marshal(transfer.Metadata)
 		if err != nil {
 			return err
@@ -49,6 +52,7 @@ func (r *TransferRepository) Create(ctx context.Context, tx usecase.Transaction,
 		EventAt:       timeToPgTimestamptz(transfer.EventAt),
 		Metadata:      metadata,
 	})
+
 	return err
 }
 
@@ -59,8 +63,10 @@ func (r *TransferRepository) GetByID(ctx context.Context, id string) (*domain.Tr
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrTransferNotFound
 		}
+
 		return nil, err
 	}
+
 	return rowToTransfer(row), nil
 }
 
@@ -79,6 +85,7 @@ func (r *TransferRepository) ListByAccount(ctx context.Context, accountID string
 	for _, row := range rows {
 		transfers = append(transfers, rowToTransfer(row))
 	}
+
 	return transfers, nil
 }
 

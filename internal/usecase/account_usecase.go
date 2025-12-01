@@ -1,11 +1,13 @@
+
 package usecase
 
 import (
 	"context"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
 )
 
 // AccountUseCase handles account business logic.
@@ -46,7 +48,8 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 		UpdatedAt:            now,
 	}
 
-	if err := uc.accountRepo.Create(ctx, account); err != nil {
+	err := uc.accountRepo.Create(ctx, account)
+	if err != nil {
 		return nil, err
 	}
 
@@ -69,8 +72,10 @@ func (uc *AccountUseCase) ListAccounts(ctx context.Context, input ListAccountsIn
 	if input.Limit <= 0 {
 		input.Limit = 20
 	}
+
 	if input.Limit > 100 {
 		input.Limit = 100
 	}
+
 	return uc.accountRepo.List(ctx, input.Limit, input.Offset)
 }

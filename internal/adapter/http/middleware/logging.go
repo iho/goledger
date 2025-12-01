@@ -1,3 +1,4 @@
+
 package middleware
 
 import (
@@ -37,6 +38,7 @@ func (m *LoggingMiddleware) Wrap(next http.Handler) http.Handler {
 
 type statusRecorder struct {
 	http.ResponseWriter
+
 	statusCode int
 }
 

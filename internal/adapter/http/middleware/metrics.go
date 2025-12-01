@@ -1,3 +1,4 @@
+
 package middleware
 
 import (
@@ -39,6 +40,7 @@ var (
 func Metrics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+
 		httpRequestsInFlight.Inc()
 		defer httpRequestsInFlight.Dec()
 
@@ -56,6 +58,7 @@ func Metrics(next http.Handler) http.Handler {
 
 type metricsRecorder struct {
 	http.ResponseWriter
+
 	statusCode int
 }
 
@@ -64,7 +67,7 @@ func (r *metricsRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// normalizePath normalizes URL paths to avoid high cardinality
+// normalizePath normalizes URL paths to avoid high cardinality.
 func normalizePath(path string) string {
 	// Normalize paths with IDs to reduce cardinality
 	// /api/v1/accounts/01ABC123 -> /api/v1/accounts/:id
@@ -78,8 +81,10 @@ func normalizePath(path string) string {
 					break
 				}
 			}
+
 			return "/api/v1/accounts/:id" + suffix
 		}
+
 	case len(path) > 21 && path[:18] == "/api/v1/transfers/":
 		if len(path) > 18 && path[18] != '/' {
 			suffix := ""
@@ -89,8 +94,10 @@ func normalizePath(path string) string {
 					break
 				}
 			}
+
 			return "/api/v1/transfers/:id" + suffix
 		}
 	}
+
 	return path
 }

@@ -1,11 +1,13 @@
+
 package usecase
 
 import (
 	"context"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
 )
 
 // AccountRepository defines data access for accounts.
@@ -51,16 +53,16 @@ type IDGenerator interface {
 
 // Cache defines caching operations.
 type Cache interface {
-	Get(ctx context.Context, key string) (string, error)
-	Set(ctx context.Context, key string, value string, ttl time.Duration) error
-	SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error)
+	Get(ctx context.Context, key string) ([]byte, error)
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	Delete(ctx context.Context, key string) error
 }
 
 // IdempotencyStore handles idempotency key storage.
 type IdempotencyStore interface {
-	// CheckAndSet atomically checks if key exists, sets if not, returns (exists, cachedResponse, error)
-	CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, cachedResponse []byte, err error)
-	// Update updates an existing idempotency key with the final response
+	// CheckAndSet atomically checks if key exists, sets if not.
+	// Returns (exists, existingValue, error).
+	CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (bool, []byte, error)
+	// Update updates an existing key with the final response.
 	Update(ctx context.Context, key string, response []byte, ttl time.Duration) error
 }

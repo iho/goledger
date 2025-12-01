@@ -1,3 +1,4 @@
+
 package dto
 
 import (
@@ -8,6 +9,8 @@ import (
 
 // AccountResponse represents an account in API responses.
 type AccountResponse struct {
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 	ID                   string    `json:"id"`
 	Name                 string    `json:"name"`
 	Currency             string    `json:"currency"`
@@ -15,8 +18,6 @@ type AccountResponse struct {
 	Version              int64     `json:"version"`
 	AllowNegativeBalance bool      `json:"allow_negative_balance"`
 	AllowPositiveBalance bool      `json:"allow_positive_balance"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // AccountFromDomain converts domain account to response.
@@ -40,18 +41,19 @@ func AccountsFromDomain(accounts []*domain.Account) []*AccountResponse {
 	for i, a := range accounts {
 		result[i] = AccountFromDomain(a)
 	}
+
 	return result
 }
 
 // TransferResponse represents a transfer in API responses.
 type TransferResponse struct {
+	CreatedAt     time.Time      `json:"created_at"`
+	EventAt       time.Time      `json:"event_at"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 	ID            string         `json:"id"`
 	FromAccountID string         `json:"from_account_id"`
 	ToAccountID   string         `json:"to_account_id"`
 	Amount        string         `json:"amount"`
-	CreatedAt     time.Time      `json:"created_at"`
-	EventAt       time.Time      `json:"event_at"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 // TransferFromDomain converts domain transfer to response.
@@ -73,11 +75,13 @@ func TransfersFromDomain(transfers []*domain.Transfer) []*TransferResponse {
 	for i, t := range transfers {
 		result[i] = TransferFromDomain(t)
 	}
+
 	return result
 }
 
 // EntryResponse represents an entry in API responses.
 type EntryResponse struct {
+	CreatedAt              time.Time `json:"created_at"`
 	ID                     string    `json:"id"`
 	AccountID              string    `json:"account_id"`
 	TransferID             string    `json:"transfer_id"`
@@ -85,7 +89,6 @@ type EntryResponse struct {
 	AccountPreviousBalance string    `json:"account_previous_balance"`
 	AccountCurrentBalance  string    `json:"account_current_balance"`
 	AccountVersion         int64     `json:"account_version"`
-	CreatedAt              time.Time `json:"created_at"`
 }
 
 // EntryFromDomain converts domain entry to response.
@@ -108,6 +111,7 @@ func EntriesFromDomain(entries []*domain.Entry) []*EntryResponse {
 	for i, e := range entries {
 		result[i] = EntryFromDomain(e)
 	}
+
 	return result
 }
 

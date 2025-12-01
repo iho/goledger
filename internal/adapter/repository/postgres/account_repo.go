@@ -1,3 +1,4 @@
+
 package postgres
 
 import (
@@ -5,13 +6,14 @@ import (
 	"errors"
 	"time"
 
-	"github.com/iho/goledger/internal/domain"
-	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
-	"github.com/iho/goledger/internal/usecase"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
+
+	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
+	"github.com/iho/goledger/internal/usecase"
 )
 
 // AccountRepository implements usecase.AccountRepository.
@@ -41,6 +43,7 @@ func (r *AccountRepository) Create(ctx context.Context, account *domain.Account)
 		CreatedAt:            timeToPgTimestamptz(account.CreatedAt),
 		UpdatedAt:            timeToPgTimestamptz(account.UpdatedAt),
 	})
+
 	return err
 }
 
@@ -51,8 +54,10 @@ func (r *AccountRepository) GetByID(ctx context.Context, id string) (*domain.Acc
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrAccountNotFound
 		}
+
 		return nil, err
 	}
+
 	return rowToAccount(row), nil
 }
 
@@ -66,8 +71,10 @@ func (r *AccountRepository) GetByIDForUpdate(ctx context.Context, tx usecase.Tra
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrAccountNotFound
 		}
+
 		return nil, err
 	}
+
 	return rowToAccount(row), nil
 }
 
@@ -85,6 +92,7 @@ func (r *AccountRepository) GetByIDsForUpdate(ctx context.Context, tx usecase.Tr
 	for _, row := range rows {
 		accounts = append(accounts, rowToAccount(row))
 	}
+
 	return accounts, nil
 }
 
@@ -114,6 +122,7 @@ func (r *AccountRepository) List(ctx context.Context, limit, offset int) ([]*dom
 	for _, row := range rows {
 		accounts = append(accounts, rowToAccount(row))
 	}
+
 	return accounts, nil
 }
 
@@ -131,10 +140,12 @@ func rowToAccount(row generated.Account) *domain.Account {
 	}
 }
 
-// Type conversion helpers
+// Type conversion helpers.
 func decimalToNumeric(d decimal.Decimal) pgtype.Numeric {
 	var n pgtype.Numeric
+
 	_ = n.Scan(d.String())
+
 	return n
 }
 
@@ -142,10 +153,12 @@ func numericToDecimal(n pgtype.Numeric) decimal.Decimal {
 	if !n.Valid {
 		return decimal.Zero
 	}
+
 	d, _ := decimal.NewFromString(n.Int.String())
 	if n.Exp != 0 {
 		d = d.Shift(n.Exp)
 	}
+
 	return d
 }
 

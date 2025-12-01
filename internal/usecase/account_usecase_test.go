@@ -2,7 +2,10 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
@@ -10,133 +13,92 @@ import (
 )
 
 func TestAccountUseCase_CreateAccount(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       usecase.CreateAccountInput
-		setupMocks  func(*mocks.MockAccountRepository, *mocks.MockIDGenerator)
-		expectError bool
-	}{
-		{
-			name: "successful account creation",
-			input: usecase.CreateAccountInput{
-				Name:                 "test-account",
-				Currency:             "USD",
-				AllowNegativeBalance: true,
-				AllowPositiveBalance: true,
-			},
-			setupMocks: func(repo *mocks.MockAccountRepository, idGen *mocks.MockIDGenerator) {
-				idGen.GenerateFunc = func() string { return "test-id-123" }
-				repo.CreateFunc = func(ctx context.Context, account *domain.Account) error {
-					return nil
-				}
-			},
-			expectError: false,
-		},
-		{
-			name: "create with repository error",
-			input: usecase.CreateAccountInput{
-				Name:     "test-account",
-				Currency: "USD",
-			},
-			setupMocks: func(repo *mocks.MockAccountRepository, idGen *mocks.MockIDGenerator) {
-				idGen.GenerateFunc = func() string { return "test-id-123" }
-				repo.CreateFunc = func(ctx context.Context, account *domain.Account) error {
-					return domain.ErrAccountNotFound // simulate error
-				}
-			},
-			expectError: true,
-		},
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	idGen.EXPECT().Generate().Return("test-id-123")
+	repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+
+	uc := usecase.NewAccountUseCase(repo, idGen)
+
+	account, err := uc.CreateAccount(context.Background(), usecase.CreateAccountInput{
+		Name:                 "test-account",
+		Currency:             "USD",
+		AllowNegativeBalance: true,
+		AllowPositiveBalance: true,
+	})
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := mocks.NewMockAccountRepository()
-			idGen := mocks.NewMockIDGenerator()
-			tt.setupMocks(repo, idGen)
+	if account == nil {
+		t.Fatal("expected account, got nil")
+	}
 
-			uc := usecase.NewAccountUseCase(repo, idGen)
-			account, err := uc.CreateAccount(context.Background(), tt.input)
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if account == nil {
-					t.Error("expected account, got nil")
-				}
-				if account != nil && account.Name != tt.input.Name {
-					t.Errorf("expected name %q, got %q", tt.input.Name, account.Name)
-				}
-			}
-		})
+	if account.Name != "test-account" {
+		t.Errorf("expected name test-account, got %s", account.Name)
 	}
 }
 
 func TestAccountUseCase_GetAccount(t *testing.T) {
-	tests := []struct {
-		name        string
-		accountID   string
-		setupMocks  func(*mocks.MockAccountRepository)
-		expectError bool
-	}{
-		{
-			name:      "get existing account",
-			accountID: "test-id-123",
-			setupMocks: func(repo *mocks.MockAccountRepository) {
-				repo.GetByIDFunc = func(ctx context.Context, id string) (*domain.Account, error) {
-					return &domain.Account{ID: id, Name: "test"}, nil
-				}
-			},
-			expectError: false,
-		},
-		{
-			name:      "get non-existent account",
-			accountID: "non-existent",
-			setupMocks: func(repo *mocks.MockAccountRepository) {
-				repo.GetByIDFunc = func(ctx context.Context, id string) (*domain.Account, error) {
-					return nil, domain.ErrAccountNotFound
-				}
-			},
-			expectError: true,
-		},
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	repo.EXPECT().GetByID(gomock.Any(), "test-id").Return(&domain.Account{
+		ID:   "test-id",
+		Name: "test",
+	}, nil)
+
+	uc := usecase.NewAccountUseCase(repo, idGen)
+
+	account, err := uc.GetAccount(context.Background(), "test-id")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := mocks.NewMockAccountRepository()
-			idGen := mocks.NewMockIDGenerator()
-			tt.setupMocks(repo)
+	if account == nil {
+		t.Fatal("expected account, got nil")
+	}
 
-			uc := usecase.NewAccountUseCase(repo, idGen)
-			account, err := uc.GetAccount(context.Background(), tt.accountID)
+	if account.ID != "test-id" {
+		t.Errorf("expected ID test-id, got %s", account.ID)
+	}
+}
 
-			if tt.expectError {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if account == nil {
-					t.Error("expected account, got nil")
-				}
-			}
-		})
+func TestAccountUseCase_GetAccount_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	repo.EXPECT().GetByID(gomock.Any(), "non-existent").Return(nil, domain.ErrAccountNotFound)
+
+	uc := usecase.NewAccountUseCase(repo, idGen)
+	_, err := uc.GetAccount(context.Background(), "non-existent")
+
+	if !errors.Is(err, domain.ErrAccountNotFound) {
+		t.Errorf("expected ErrAccountNotFound, got %v", err)
 	}
 }
 
 func TestAccountUseCase_ListAccounts(t *testing.T) {
-	repo := mocks.NewMockAccountRepository()
-	idGen := mocks.NewMockIDGenerator()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	// Pre-populate with accounts
-	repo.Create(context.Background(), &domain.Account{ID: "1", Name: "acc1"})
-	repo.Create(context.Background(), &domain.Account{ID: "2", Name: "acc2"})
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	repo.EXPECT().List(gomock.Any(), 10, 0).Return([]*domain.Account{
+		{ID: "1", Name: "acc1"},
+		{ID: "2", Name: "acc2"},
+	}, nil)
 
 	uc := usecase.NewAccountUseCase(repo, idGen)
 

@@ -1,14 +1,17 @@
+
 package http
 
 import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	"github.com/iho/goledger/internal/adapter/http/middleware"
 	"github.com/iho/goledger/internal/usecase"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // RouterConfig holds dependencies for the router.

@@ -1,3 +1,4 @@
+
 package domain
 
 import (
@@ -10,8 +11,8 @@ func TestAccount_ValidateDebit(t *testing.T) {
 	tests := []struct {
 		name        string
 		balance     decimal.Decimal
-		allowNeg    bool
 		debitAmount decimal.Decimal
+		allowNeg    bool
 		expectError bool
 	}{
 		{
@@ -56,6 +57,7 @@ func TestAccount_ValidateDebit(t *testing.T) {
 			if tt.expectError && err == nil {
 				t.Error("expected error, got nil")
 			}
+
 			if !tt.expectError && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -67,8 +69,8 @@ func TestAccount_ValidateCredit(t *testing.T) {
 	tests := []struct {
 		name         string
 		balance      decimal.Decimal
-		allowPos     bool
 		creditAmount decimal.Decimal
+		allowPos     bool
 		expectError  bool
 	}{
 		{
@@ -106,6 +108,7 @@ func TestAccount_ValidateCredit(t *testing.T) {
 			if tt.expectError && err == nil {
 				t.Error("expected error, got nil")
 			}
+
 			if !tt.expectError && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

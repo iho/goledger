@@ -1,3 +1,4 @@
+
 package integration
 
 import (
@@ -7,10 +8,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/iho/goledger/internal/adapter/repository/postgres"
 	"github.com/iho/goledger/internal/usecase"
 	"github.com/iho/goledger/tests/testutil"
-	"github.com/shopspring/decimal"
 )
 
 func TestConcurrentTransfers(t *testing.T) {
@@ -19,6 +21,7 @@ func TestConcurrentTransfers(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Cleanup()
 
@@ -41,14 +44,18 @@ func TestConcurrentTransfers(t *testing.T) {
 		numTransfers := 100
 		transferAmount := decimal.NewFromInt(10)
 
-		var wg sync.WaitGroup
-		var successCount atomic.Int32
-		var errorCount atomic.Int32
+		var (
+			wg           sync.WaitGroup
+			successCount atomic.Int32
+			errorCount   atomic.Int32
+		)
 
 		wg.Add(numTransfers)
-		for i := 0; i < numTransfers; i++ {
+
+		for range numTransfers {
 			go func() {
 				defer wg.Done()
+
 				_, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
 					FromAccountID: source.ID,
 					ToAccountID:   dest.ID,
@@ -76,6 +83,7 @@ func TestConcurrentTransfers(t *testing.T) {
 		if !sourceAcc.Balance.Equal(decimal.Zero) {
 			t.Errorf("expected source balance 0, got %s", sourceAcc.Balance)
 		}
+
 		if !destAcc.Balance.Equal(decimal.NewFromInt(1000)) {
 			t.Errorf("expected dest balance 1000, got %s", destAcc.Balance)
 		}
@@ -91,14 +99,18 @@ func TestConcurrentTransfers(t *testing.T) {
 		numTransfers := 20
 		transferAmount := decimal.NewFromInt(10) // 20 * 10 = 200 > 100
 
-		var wg sync.WaitGroup
-		var successCount atomic.Int32
-		var errorCount atomic.Int32
+		var (
+			wg           sync.WaitGroup
+			successCount atomic.Int32
+			errorCount   atomic.Int32
+		)
 
 		wg.Add(numTransfers)
-		for i := 0; i < numTransfers; i++ {
+
+		for range numTransfers {
 			go func() {
 				defer wg.Done()
+
 				_, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
 					FromAccountID: source.ID,
 					ToAccountID:   dest.ID,
@@ -135,14 +147,19 @@ func TestConcurrentTransfers(t *testing.T) {
 
 		numTransfers := 50
 
-		var wg sync.WaitGroup
-		var successCount atomic.Int32
+		var (
+			wg           sync.WaitGroup
+			successCount atomic.Int32
+		)
 
 		// Half transfer A -> B, half transfer B -> A concurrently
+
 		wg.Add(numTransfers * 2)
-		for i := 0; i < numTransfers; i++ {
+
+		for range numTransfers {
 			go func() {
 				defer wg.Done()
+
 				_, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
 					FromAccountID: a.ID,
 					ToAccountID:   b.ID,
@@ -154,6 +171,7 @@ func TestConcurrentTransfers(t *testing.T) {
 			}()
 			go func() {
 				defer wg.Done()
+
 				_, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
 					FromAccountID: b.ID,
 					ToAccountID:   a.ID,
@@ -179,6 +197,7 @@ func TestConcurrentTransfers(t *testing.T) {
 		if !aAcc.Balance.Equal(decimal.NewFromInt(1000)) {
 			t.Errorf("expected a balance 1000, got %s", aAcc.Balance)
 		}
+
 		if !bAcc.Balance.Equal(decimal.NewFromInt(1000)) {
 			t.Errorf("expected b balance 1000, got %s", bAcc.Balance)
 		}

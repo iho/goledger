@@ -1,6 +1,8 @@
+
 package domain
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -8,11 +10,11 @@ import (
 
 func TestTransfer_Validate(t *testing.T) {
 	tests := []struct {
+		expectError error
 		name        string
 		fromID      string
 		toID        string
 		amount      decimal.Decimal
-		expectError error
 	}{
 		{
 			name:        "valid transfer",
@@ -57,7 +59,8 @@ func TestTransfer_Validate(t *testing.T) {
 			if tt.expectError == nil && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			if tt.expectError != nil && err != tt.expectError {
+
+			if tt.expectError != nil && !errors.Is(err, tt.expectError) {
 				t.Errorf("expected error %v, got %v", tt.expectError, err)
 			}
 		})

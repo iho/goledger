@@ -1,3 +1,4 @@
+
 package integration
 
 import (
@@ -9,6 +10,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	adaptershttp "github.com/iho/goledger/internal/adapter/http"
 	"github.com/iho/goledger/internal/adapter/http/dto"
 	"github.com/iho/goledger/internal/adapter/http/handler"
@@ -17,7 +20,6 @@ import (
 	infraredis "github.com/iho/goledger/internal/infrastructure/redis"
 	"github.com/iho/goledger/internal/usecase"
 	"github.com/iho/goledger/tests/testutil"
-	"github.com/shopspring/decimal"
 )
 
 func TestTransfer(t *testing.T) {
@@ -26,8 +28,10 @@ func TestTransfer(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Cleanup()
+
 	testDB.TruncateAll(ctx)
 
 	pool := testDB.Pool
@@ -45,6 +49,7 @@ func TestTransfer(t *testing.T) {
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379"
 	}
+
 	redisClient, err := infraredis.NewClient(ctx, redisURL)
 	if err != nil {
 		t.Fatalf("failed to connect to redis: %v", err)
@@ -77,6 +82,7 @@ func TestTransfer(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -86,7 +92,8 @@ func TestTransfer(t *testing.T) {
 		}
 
 		var resp dto.TransferResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
 			t.Fatalf("failed to parse response: %v", err)
 		}
 
@@ -111,6 +118,7 @@ func TestTransfer(t *testing.T) {
 
 	t.Run("reject transfer to same account", func(t *testing.T) {
 		testDB.TruncateAll(ctx)
+
 		account := testDB.CreateTestAccountWithBalance(ctx, "self", "USD", decimal.NewFromInt(100), true, true)
 
 		req := dto.CreateTransferRequest{
@@ -122,6 +130,7 @@ func TestTransfer(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -147,6 +156,7 @@ func TestTransfer(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -171,6 +181,7 @@ func TestTransfer(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -197,6 +208,7 @@ func TestTransfer(t *testing.T) {
 
 		r := httptest.NewRequest(http.MethodPost, "/api/v1/transfers/batch", bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, r)
@@ -213,9 +225,11 @@ func TestTransfer(t *testing.T) {
 		if !aAcc.Balance.Equal(decimal.NewFromInt(700)) {
 			t.Errorf("expected a balance 700, got %s", aAcc.Balance)
 		}
+
 		if !bAcc.Balance.Equal(decimal.NewFromInt(100)) {
 			t.Errorf("expected b balance 100, got %s", bAcc.Balance)
 		}
+
 		if !cAcc.Balance.Equal(decimal.NewFromInt(200)) {
 			t.Errorf("expected c balance 200, got %s", cAcc.Balance)
 		}
@@ -240,6 +254,7 @@ func TestTransfer(t *testing.T) {
 		r1 := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body))
 		r1.Header.Set("Content-Type", "application/json")
 		r1.Header.Set("Idempotency-Key", idempotencyKey)
+
 		w1 := httptest.NewRecorder()
 
 		router.ServeHTTP(w1, r1)
@@ -256,6 +271,7 @@ func TestTransfer(t *testing.T) {
 		r2 := httptest.NewRequest(http.MethodPost, "/api/v1/transfers", bytes.NewReader(body2))
 		r2.Header.Set("Content-Type", "application/json")
 		r2.Header.Set("Idempotency-Key", idempotencyKey)
+
 		w2 := httptest.NewRecorder()
 
 		router.ServeHTTP(w2, r2)

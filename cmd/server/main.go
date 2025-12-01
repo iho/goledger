@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -24,8 +23,7 @@ import (
 
 func main() {
 	// Setup logger
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 
 	// Load configuration
 	cfg, err := config.Load()
@@ -38,6 +36,7 @@ func main() {
 	if err != nil {
 		level = zerolog.InfoLevel
 	}
+
 	zerolog.SetGlobalLevel(level)
 
 	ctx := context.Background()
@@ -48,6 +47,7 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to postgres")
 	}
 	defer pool.Close()
+
 	log.Info().Msg("connected to postgres")
 
 	// Connect to Redis
@@ -56,6 +56,7 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to redis")
 	}
 	defer redisClient.Close()
+
 	log.Info().Msg("connected to redis")
 
 	// Initialize repositories
@@ -86,18 +87,21 @@ func main() {
 		IdempotencyStore: idempotencyStore,
 	})
 
-	// Create server
+	// Create server with timeouts
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
+		Addr:         ":" + cfg.HTTPPort,
 		Handler:      router,
 		ReadTimeout:  cfg.HTTPReadTimeout,
 		WriteTimeout: cfg.HTTPWriteTimeout,
+		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
 
 	// Start server in goroutine
 	go func() {
 		log.Info().Str("port", cfg.HTTPPort).Msg("starting server")
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		err := server.ListenAndServe()
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal().Err(err).Msg("server failed")
 		}
 	}()
@@ -109,8 +113,8 @@ func main() {
 
 	log.Info().Msg("shutting down server...")
 
-	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Graceful shutdown with configured timeout
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {

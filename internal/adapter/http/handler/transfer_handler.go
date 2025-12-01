@@ -1,3 +1,4 @@
+
 package handler
 
 import (
@@ -5,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/iho/goledger/internal/adapter/http/dto"
 	"github.com/iho/goledger/internal/usecase"
 )
@@ -37,6 +39,7 @@ func (h *TransferHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to create transfer", err.Error())
+
 		return
 	}
 
@@ -61,6 +64,7 @@ func (h *TransferHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to create transfers", err.Error())
+
 		return
 	}
 
@@ -79,6 +83,7 @@ func (h *TransferHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to get transfer", err.Error())
+
 		return
 	}
 

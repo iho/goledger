@@ -1,3 +1,4 @@
+
 package handler
 
 import (
@@ -5,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/iho/goledger/internal/adapter/http/dto"
 	"github.com/iho/goledger/internal/usecase"
 )
@@ -48,6 +50,7 @@ func (h *AccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		status := mapDomainError(err)
 		writeError(w, status, "failed to get account", err.Error())
+
 		return
 	}
 

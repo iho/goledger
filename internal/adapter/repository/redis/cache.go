@@ -1,3 +1,4 @@
+
 package redis
 
 import (
@@ -27,12 +28,12 @@ func (c *Cache) Get(ctx context.Context, key string) (string, error) {
 }
 
 // Set stores a value with TTL.
-func (c *Cache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+func (c *Cache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	return c.client.Set(ctx, c.prefix+key, value, ttl).Err()
 }
 
 // SetNX sets a value only if it doesn't exist.
-func (c *Cache) SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error) {
+func (c *Cache) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	return c.client.SetNX(ctx, c.prefix+key, value, ttl).Result()
 }
 

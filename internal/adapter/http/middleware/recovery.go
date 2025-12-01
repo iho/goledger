@@ -1,3 +1,4 @@
+
 package middleware
 
 import (
@@ -24,6 +25,7 @@ func Recovery(next http.Handler) http.Handler {
 				w.Write([]byte(`{"error":"internal server error"}`))
 			}
 		}()
+
 		next.ServeHTTP(w, r)
 	})
 }
