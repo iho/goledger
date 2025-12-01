@@ -1,4 +1,3 @@
-
 package postgres
 
 import (
@@ -44,13 +43,14 @@ func (r *TransferRepository) Create(ctx context.Context, tx usecase.Transaction,
 	}
 
 	_, err := queries.CreateTransfer(ctx, generated.CreateTransferParams{
-		ID:            transfer.ID,
-		FromAccountID: transfer.FromAccountID,
-		ToAccountID:   transfer.ToAccountID,
-		Amount:        decimalToNumeric(transfer.Amount),
-		CreatedAt:     timeToPgTimestamptz(transfer.CreatedAt),
-		EventAt:       timeToPgTimestamptz(transfer.EventAt),
-		Metadata:      metadata,
+		ID:                 transfer.ID,
+		FromAccountID:      transfer.FromAccountID,
+		ToAccountID:        transfer.ToAccountID,
+		Amount:             decimalToNumeric(transfer.Amount),
+		CreatedAt:          timeToPgTimestamptz(transfer.CreatedAt),
+		EventAt:            timeToPgTimestamptz(transfer.EventAt),
+		Metadata:           metadata,
+		ReversedTransferID: transfer.ReversedTransferID,
 	})
 
 	return err
@@ -96,12 +96,13 @@ func rowToTransfer(row generated.Transfer) *domain.Transfer {
 	}
 
 	return &domain.Transfer{
-		ID:            row.ID,
-		FromAccountID: row.FromAccountID,
-		ToAccountID:   row.ToAccountID,
-		Amount:        numericToDecimal(row.Amount),
-		CreatedAt:     row.CreatedAt.Time,
-		EventAt:       row.EventAt.Time,
-		Metadata:      metadata,
+		ID:                 row.ID,
+		FromAccountID:      row.FromAccountID,
+		ToAccountID:        row.ToAccountID,
+		Amount:             numericToDecimal(row.Amount),
+		CreatedAt:          row.CreatedAt.Time,
+		EventAt:            row.EventAt.Time,
+		Metadata:           metadata,
+		ReversedTransferID: row.ReversedTransferID,
 	}
 }

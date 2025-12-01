@@ -332,3 +332,179 @@ func (uc *TransferUseCase) buildAccountMap(accounts []*domain.Account) map[strin
 
 	return m
 }
+
+// ReverseTransferInput represents input for reversing a transfer.
+type ReverseTransferInput struct {
+	TransferID string
+	Metadata   map[string]any
+}
+
+// ReverseTransfer creates a reversal transfer that offsets an original transfer.
+func (uc *TransferUseCase) ReverseTransfer(ctx context.Context, input ReverseTransferInput) (*domain.Transfer, error) {
+	// Fetch the original transfer
+	originalTransfer, err := uc.transferRepo.GetByID(ctx, input.TransferID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the transfer has already been reversed
+	if originalTransfer.ReversedTransferID != nil {
+		return nil, domain.ErrTransferAlreadyReversed
+	}
+
+	// Create reversal transfer with swapped accounts
+	now := time.Now()
+	reversalInput := CreateTransferInput{
+		FromAccountID: originalTransfer.ToAccountID,   // Swap
+		ToAccountID:   originalTransfer.FromAccountID, // Swap
+		Amount:        originalTransfer.Amount,
+		EventAt:       &now,
+		Metadata:      input.Metadata,
+	}
+
+	var reversalTransfer *domain.Transfer
+	err = uc.retrier.Retry(ctx, func() error {
+		tx, txErr := uc.txManager.Begin(ctx)
+		if txErr != nil {
+			return txErr
+		}
+		defer tx.Rollback(ctx)
+
+		reversalTransfer, txErr = uc.executeReverseTransfer(ctx, tx, reversalInput, originalTransfer.ID)
+		if txErr != nil {
+			return txErr
+		}
+
+		return tx.Commit(ctx)
+	})
+
+	return reversalTransfer, err
+}
+
+func (uc *TransferUseCase) executeReverseTransfer(
+	ctx context.Context,
+	tx Transaction,
+	input CreateTransferInput,
+	originalTransferID string,
+) (*domain.Transfer, error) {
+	now := time.Now()
+	eventAt := now
+	if input.EventAt != nil && !input.EventAt.IsZero() {
+		eventAt = *input.EventAt
+	}
+
+	metadata := input.Metadata
+	if metadata == nil {
+		metadata = make(map[string]any)
+	}
+	metadata["reversal_of"] = originalTransferID
+
+	// Lock accounts in sorted order to prevent deadlocks
+	accountIDs := []string{input.FromAccountID, input.ToAccountID}
+	sort.Strings(accountIDs)
+
+	// Fetch and lock accounts
+	fromAccount, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, input.FromAccountID)
+	if err != nil {
+		return nil, err
+	}
+
+	toAccount, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, input.ToAccountID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate currency match
+	if fromAccount.Currency != toAccount.Currency {
+		return nil, domain.ErrCurrencyMismatch
+	}
+
+	// Validate balances
+	err = fromAccount.ValidateDebit(input.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	err = toAccount.ValidateCredit(input.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create reversal transfer
+	reversalTransfer := &domain.Transfer{
+		ID:                 uc.idGen.Generate(),
+		FromAccountID:      input.FromAccountID,
+		ToAccountID:        input.ToAccountID,
+		Amount:             input.Amount,
+		CreatedAt:          now,
+		EventAt:            eventAt,
+		Metadata:           metadata,
+		ReversedTransferID: &originalTransferID,
+	}
+
+	err = reversalTransfer.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	err = uc.transferRepo.Create(ctx, tx, reversalTransfer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create debit entry (from account)
+	fromNewBalance := fromAccount.ApplyDebit(input.Amount)
+	fromEntry := &domain.Entry{
+		ID:                     uc.idGen.Generate(),
+		AccountID:              fromAccount.ID,
+		TransferID:             reversalTransfer.ID,
+		Amount:                 input.Amount.Neg(),
+		AccountPreviousBalance: fromAccount.Balance,
+		AccountCurrentBalance:  fromNewBalance,
+		AccountVersion:         fromAccount.Version + 1,
+		CreatedAt:              now,
+	}
+
+	err = uc.entryRepo.Create(ctx, tx, fromEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update from account balance
+	err = uc.accountRepo.UpdateBalance(ctx, tx, fromAccount.ID, fromNewBalance, now)
+	if err != nil {
+		return nil, err
+	}
+
+	fromAccount.Balance = fromNewBalance
+	fromAccount.Version++
+
+	// Create credit entry (to account)
+	toNewBalance := toAccount.ApplyCredit(input.Amount)
+	toEntry := &domain.Entry{
+		ID:                     uc.idGen.Generate(),
+		AccountID:              toAccount.ID,
+		TransferID:             reversalTransfer.ID,
+		Amount:                 input.Amount,
+		AccountPreviousBalance: toAccount.Balance,
+		AccountCurrentBalance:  toNewBalance,
+		AccountVersion:         toAccount.Version + 1,
+		CreatedAt:              now,
+	}
+
+	err = uc.entryRepo.Create(ctx, tx, toEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update to account balance
+	err = uc.accountRepo.UpdateBalance(ctx, tx, toAccount.ID, toNewBalance, now)
+	if err != nil {
+		return nil, err
+	}
+
+	toAccount.Balance = toNewBalance
+	toAccount.Version++
+
+	return reversalTransfer, nil
+}

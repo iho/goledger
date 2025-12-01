@@ -74,6 +74,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			r.Post("/batch", cfg.TransferHandler.CreateBatch)
 			r.Get("/{id}", cfg.TransferHandler.Get)
 			r.Get("/{id}/entries", cfg.EntryHandler.ListByTransfer)
+			r.Post("/{id}/reverse", cfg.TransferHandler.Reverse)
 		})
 
 		// Holds

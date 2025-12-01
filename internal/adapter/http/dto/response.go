@@ -1,4 +1,3 @@
-
 package dto
 
 import (
@@ -47,25 +46,27 @@ func AccountsFromDomain(accounts []*domain.Account) []*AccountResponse {
 
 // TransferResponse represents a transfer in API responses.
 type TransferResponse struct {
-	CreatedAt     time.Time      `json:"created_at"`
-	EventAt       time.Time      `json:"event_at"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
-	ID            string         `json:"id"`
-	FromAccountID string         `json:"from_account_id"`
-	ToAccountID   string         `json:"to_account_id"`
-	Amount        string         `json:"amount"`
+	CreatedAt          time.Time      `json:"created_at"`
+	EventAt            time.Time      `json:"event_at"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
+	ID                 string         `json:"id"`
+	FromAccountID      string         `json:"from_account_id"`
+	ToAccountID        string         `json:"to_account_id"`
+	Amount             string         `json:"amount"`
+	ReversedTransferID *string        `json:"reversed_transfer_id,omitempty"`
 }
 
 // TransferFromDomain converts domain transfer to response.
 func TransferFromDomain(t *domain.Transfer) *TransferResponse {
 	return &TransferResponse{
-		ID:            t.ID,
-		FromAccountID: t.FromAccountID,
-		ToAccountID:   t.ToAccountID,
-		Amount:        t.Amount.String(),
-		CreatedAt:     t.CreatedAt,
-		EventAt:       t.EventAt,
-		Metadata:      t.Metadata,
+		ID:                 t.ID,
+		FromAccountID:      t.FromAccountID,
+		ToAccountID:        t.ToAccountID,
+		Amount:             t.Amount.String(),
+		CreatedAt:          t.CreatedAt,
+		EventAt:            t.EventAt,
+		Metadata:           t.Metadata,
+		ReversedTransferID: t.ReversedTransferID,
 	}
 }
 

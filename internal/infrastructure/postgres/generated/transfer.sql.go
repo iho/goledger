@@ -24,19 +24,20 @@ func (q *Queries) CountTransfersByAccount(ctx context.Context, fromAccountID str
 }
 
 const createTransfer = `-- name: CreateTransfer :one
-INSERT INTO transfers (id, from_account_id, to_account_id, amount, created_at, event_at, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, from_account_id, to_account_id, amount, created_at, event_at, metadata
+INSERT INTO transfers (id, from_account_id, to_account_id, amount, created_at, event_at, metadata, reversed_transfer_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, from_account_id, to_account_id, amount, created_at, event_at, metadata, reversed_transfer_id
 `
 
 type CreateTransferParams struct {
-	ID            string             `json:"id"`
-	FromAccountID string             `json:"from_account_id"`
-	ToAccountID   string             `json:"to_account_id"`
-	Amount        pgtype.Numeric     `json:"amount"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	EventAt       pgtype.Timestamptz `json:"event_at"`
-	Metadata      []byte             `json:"metadata"`
+	ID                 string             `json:"id"`
+	FromAccountID      string             `json:"from_account_id"`
+	ToAccountID        string             `json:"to_account_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	EventAt            pgtype.Timestamptz `json:"event_at"`
+	Metadata           []byte             `json:"metadata"`
+	ReversedTransferID *string            `json:"reversed_transfer_id"`
 }
 
 func (q *Queries) CreateTransfer(ctx context.Context, arg CreateTransferParams) (Transfer, error) {
@@ -48,6 +49,7 @@ func (q *Queries) CreateTransfer(ctx context.Context, arg CreateTransferParams) 
 		arg.CreatedAt,
 		arg.EventAt,
 		arg.Metadata,
+		arg.ReversedTransferID,
 	)
 	var i Transfer
 	err := row.Scan(
@@ -58,12 +60,13 @@ func (q *Queries) CreateTransfer(ctx context.Context, arg CreateTransferParams) 
 		&i.CreatedAt,
 		&i.EventAt,
 		&i.Metadata,
+		&i.ReversedTransferID,
 	)
 	return i, err
 }
 
 const getTransferByID = `-- name: GetTransferByID :one
-SELECT id, from_account_id, to_account_id, amount, created_at, event_at, metadata FROM transfers WHERE id = $1
+SELECT id, from_account_id, to_account_id, amount, created_at, event_at, metadata, reversed_transfer_id FROM transfers WHERE id = $1
 `
 
 func (q *Queries) GetTransferByID(ctx context.Context, id string) (Transfer, error) {
@@ -77,12 +80,13 @@ func (q *Queries) GetTransferByID(ctx context.Context, id string) (Transfer, err
 		&i.CreatedAt,
 		&i.EventAt,
 		&i.Metadata,
+		&i.ReversedTransferID,
 	)
 	return i, err
 }
 
 const listTransfersByAccount = `-- name: ListTransfersByAccount :many
-SELECT id, from_account_id, to_account_id, amount, created_at, event_at, metadata FROM transfers
+SELECT id, from_account_id, to_account_id, amount, created_at, event_at, metadata, reversed_transfer_id FROM transfers
 WHERE from_account_id = $1 OR to_account_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -111,6 +115,7 @@ func (q *Queries) ListTransfersByAccount(ctx context.Context, arg ListTransfersB
 			&i.CreatedAt,
 			&i.EventAt,
 			&i.Metadata,
+			&i.ReversedTransferID,
 		); err != nil {
 			return nil, err
 		}

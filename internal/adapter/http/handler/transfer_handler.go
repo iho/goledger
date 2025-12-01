@@ -1,4 +1,3 @@
-
 package handler
 
 import (
@@ -112,4 +111,29 @@ func (h *TransferHandler) ListByAccount(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, dto.TransfersFromDomain(transfers))
+}
+
+// Reverse creates a reversal transfer.
+func (h *TransferHandler) Reverse(w http.ResponseWriter, r *http.Request) {
+	transferID := chi.URLParam(r, "id")
+	if transferID == "" {
+		writeError(w, http.StatusBadRequest, "missing transfer ID", "")
+		return
+	}
+
+	var req dto.ReverseTransferRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body", err.Error())
+		return
+	}
+
+	input := req.ToUseCaseInput(transferID)
+	reversalTransfer, err := h.transferUC.ReverseTransfer(r.Context(), input)
+	if err != nil {
+		status := mapDomainError(err)
+		writeError(w, status, "failed to reverse transfer", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, dto.TransferFromDomain(reversalTransfer))
 }

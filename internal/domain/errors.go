@@ -1,4 +1,3 @@
-
 package domain
 
 import "errors"
@@ -10,8 +9,9 @@ var (
 	ErrAccountNotFound           = errors.New("account not found")
 
 	// Transfer errors.
-	ErrSameAccount      = errors.New("cannot transfer to same account")
-	ErrInvalidAmount    = errors.New("amount must be positive")
-	ErrCurrencyMismatch = errors.New("cannot transfer between different currencies")
-	ErrTransferNotFound = errors.New("transfer not found")
+	ErrSameAccount             = errors.New("cannot transfer to same account")
+	ErrInvalidAmount           = errors.New("amount must be positive")
+	ErrCurrencyMismatch        = errors.New("cannot transfer between different currencies")
+	ErrTransferNotFound        = errors.New("transfer not found")
+	ErrTransferAlreadyReversed = errors.New("transfer has already been reversed")
 )

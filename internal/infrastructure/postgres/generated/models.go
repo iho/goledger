@@ -44,11 +44,12 @@ type Hold struct {
 }
 
 type Transfer struct {
-	ID            string             `json:"id"`
-	FromAccountID string             `json:"from_account_id"`
-	ToAccountID   string             `json:"to_account_id"`
-	Amount        pgtype.Numeric     `json:"amount"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	EventAt       pgtype.Timestamptz `json:"event_at"`
-	Metadata      []byte             `json:"metadata"`
+	ID                 string             `json:"id"`
+	FromAccountID      string             `json:"from_account_id"`
+	ToAccountID        string             `json:"to_account_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	EventAt            pgtype.Timestamptz `json:"event_at"`
+	Metadata           []byte             `json:"metadata"`
+	ReversedTransferID *string            `json:"reversed_transfer_id"`
 }

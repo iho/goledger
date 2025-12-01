@@ -1,4 +1,3 @@
-
 package dto
 
 import (
@@ -87,6 +86,19 @@ func (r *CreateBatchTransferRequest) ToUseCaseInput() (usecase.CreateBatchTransf
 		EventAt:   r.EventAt,
 		Metadata:  r.Metadata,
 	}, nil
+}
+
+// ReverseTransferRequest represents a request to reverse a transfer.
+type ReverseTransferRequest struct {
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// ToUseCaseInput converts to use case input.
+func (r *ReverseTransferRequest) ToUseCaseInput(transferID string) usecase.ReverseTransferInput {
+	return usecase.ReverseTransferInput{
+		TransferID: transferID,
+		Metadata:   r.Metadata,
+	}
 }
 
 // PaginationRequest represents pagination parameters.

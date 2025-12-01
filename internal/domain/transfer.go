@@ -1,4 +1,3 @@
-
 package domain
 
 import (
@@ -9,13 +8,14 @@ import (
 
 // Transfer represents a money movement between two accounts.
 type Transfer struct {
-	CreatedAt     time.Time
-	EventAt       time.Time
-	Metadata      map[string]any
-	ID            string
-	FromAccountID string
-	ToAccountID   string
-	Amount        decimal.Decimal
+	CreatedAt          time.Time
+	EventAt            time.Time
+	Metadata           map[string]any
+	ID                 string
+	FromAccountID      string
+	ToAccountID        string
+	Amount             decimal.Decimal
+	ReversedTransferID *string
 }
 
 // Validate validates transfer request.
