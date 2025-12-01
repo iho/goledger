@@ -4,16 +4,22 @@ set -e
 echo "🚀 GoLedger Setup & Test Script"
 echo "================================"
 
-# 1. Clean everything
-echo "1️⃣  Cleaning old containers and volumes..."
+DB_URL="postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable"
+
+# 1. Build CLI
+echo "1️⃣  Building CLI..."
+go build -o bin/cli ./cmd/cli
+
+# 2. Clean everything
+echo "2️⃣  Cleaning old containers and volumes..."
 docker-compose -f docker-compose.full.yml down -v 2>/dev/null || true
 
-# 2. Start services (will build automatically)
-echo "4️⃣  Starting services..."
-docker-compose -f docker-compose.full.yml up -d
+# 3. Start services (will build automatically)
+echo "3️⃣  Starting services..."
+docker-compose -f docker-compose.full.yml up -d --build
 
-# 5. Wait for PostgreSQL
-echo "5️⃣  Waiting for PostgreSQL to be ready..."
+# 4. Wait for PostgreSQL
+echo "4️⃣  Waiting for PostgreSQL to be ready..."
 for i in {1..30}; do
     if docker exec goledger-postgres pg_isready -U ledger >/dev/null 2>&1; then
         echo "✅ PostgreSQL is ready!"
@@ -23,14 +29,18 @@ for i in {1..30}; do
     sleep 1
 done
 
-# 6. Run migrations
-echo "6️⃣  Running database migrations..."
-docker exec -i goledger-postgres psql -U ledger -d ledger < migrations/000006_create_audit_logs.up.sql 2>/dev/null || echo "   Migration 6 already applied"
-docker exec -i goledger-postgres psql -U ledger -d ledger < migrations/000007_create_users.up.sql 2>/dev/null || echo "   Migration 7 already applied"
+# 5. Run setup via CLI (migrations + admin user)
+echo "5️⃣  Running setup via CLI..."
+./bin/cli setup --database-url "$DB_URL" || echo "   Setup may have partially completed"
 
-# 7. Create test users
-echo "7️⃣  Creating test users..."
-docker exec -i goledger-postgres psql -U ledger -d ledger < scripts/create_test_users.sql 2>/dev/null || echo "   Users already exist"
+# 6. Create additional test users via CLI
+echo "6️⃣  Creating test users via CLI..."
+./bin/cli user create --email "operator@goledger.io" --name "Operator User" --password "Operator123" --role operator --database-url "$DB_URL" 2>/dev/null || echo "   Operator user exists"
+./bin/cli user create --email "viewer@goledger.io" --name "Viewer User" --password "Viewer123" --role viewer --database-url "$DB_URL" 2>/dev/null || echo "   Viewer user exists"
+
+# 7. List users
+echo "7️⃣  Listing users..."
+./bin/cli user list --database-url "$DB_URL"
 
 # 8. Wait for app to be ready
 echo "8️⃣  Waiting for application to be ready..."
