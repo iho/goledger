@@ -4,24 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/iho/goledger/internal/adapter/repository/postgres"
 	"github.com/iho/goledger/internal/domain"
-	infraPg "github.com/iho/goledger/internal/infrastructure/postgres"
+	infraPostgres "github.com/iho/goledger/internal/infrastructure/postgres"
+	"github.com/iho/goledger/internal/usecase"
 )
 
 var (
-	baseURL     string
-	timeout     time.Duration
 	databaseURL string
+	jsonOutput  bool
 )
 
 func main() {
@@ -32,17 +31,18 @@ func main() {
 	}
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "http://localhost:8080", "Base URL of the GoLedger API")
-	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 10*time.Second, "Request timeout")
 	rootCmd.PersistentFlags().StringVar(&databaseURL, "database-url", os.Getenv("DATABASE_URL"), "Database connection URL")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	// Add commands
 	rootCmd.AddCommand(setupCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(userCmd())
+	rootCmd.AddCommand(accountCmd())
+	rootCmd.AddCommand(transferCmd())
+	rootCmd.AddCommand(holdCmd())
 	rootCmd.AddCommand(ledgerCmd())
 	rootCmd.AddCommand(hashPasswordCmd())
-	rootCmd.AddCommand(serveCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -80,7 +80,7 @@ func setupCmd() *cobra.Command {
 
 			// Run migrations
 			fmt.Println("📦 Running migrations...")
-			if err := infraPg.RunMigrations(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
+			if err := infraPostgres.RunMigrations(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
 				fmt.Printf("❌ Migration failed: %v\n", err)
 				os.Exit(1)
 			}
@@ -122,7 +122,7 @@ func migrateCmd() *cobra.Command {
 			pool := mustConnectDB(ctx)
 			defer pool.Close()
 
-			if err := infraPg.RunMigrations(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
+			if err := infraPostgres.RunMigrations(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
 				fmt.Printf("❌ Migration failed: %v\n", err)
 				os.Exit(1)
 			}
@@ -138,7 +138,7 @@ func migrateCmd() *cobra.Command {
 			pool := mustConnectDB(ctx)
 			defer pool.Close()
 
-			if err := infraPg.RunMigrationsDown(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
+			if err := infraPostgres.RunMigrationsDown(databaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
 				fmt.Printf("❌ Rollback failed: %v\n", err)
 				os.Exit(1)
 			}
@@ -220,6 +220,362 @@ func userCmd() *cobra.Command {
 	return cmd
 }
 
+// ============ ACCOUNT COMMAND ============
+
+func accountCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "account",
+		Short: "Account management",
+	}
+
+	// Create account
+	var name, currency string
+	var allowNegative, allowPositive bool
+	createCmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new account",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			accountUC := usecase.NewAccountUseCase(
+				postgres.NewAccountRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			account, err := accountUC.CreateAccount(ctx, usecase.CreateAccountInput{
+				Name:                 name,
+				Currency:             currency,
+				AllowNegativeBalance: allowNegative,
+				AllowPositiveBalance: allowPositive,
+			})
+			if err != nil {
+				fmt.Printf("❌ Failed to create account: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(account)
+			} else {
+				fmt.Printf("✅ Account created: %s\n", account.ID)
+				fmt.Printf("   Name: %s\n", account.Name)
+				fmt.Printf("   Currency: %s\n", account.Currency)
+			}
+		},
+	}
+	createCmd.Flags().StringVar(&name, "name", "", "Account name (required)")
+	createCmd.Flags().StringVar(&currency, "currency", "USD", "Currency code")
+	createCmd.Flags().BoolVar(&allowNegative, "allow-negative", false, "Allow negative balance")
+	createCmd.Flags().BoolVar(&allowPositive, "allow-positive", true, "Allow positive balance")
+	createCmd.MarkFlagRequired("name")
+
+	// List accounts
+	var limit, offset int
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all accounts",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			accountUC := usecase.NewAccountUseCase(
+				postgres.NewAccountRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			accounts, err := accountUC.ListAccounts(ctx, usecase.ListAccountsInput{
+				Limit:  limit,
+				Offset: offset,
+			})
+			if err != nil {
+				fmt.Printf("❌ Failed to list accounts: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(accounts)
+			} else {
+				fmt.Printf("%-28s %-20s %-8s %-15s\n", "ID", "NAME", "CURRENCY", "BALANCE")
+				fmt.Println("-----------------------------------------------------------------------")
+				for _, a := range accounts {
+					fmt.Printf("%-28s %-20s %-8s %-15s\n", a.ID, truncate(a.Name, 20), a.Currency, a.Balance.String())
+				}
+			}
+		},
+	}
+	listCmd.Flags().IntVar(&limit, "limit", 100, "Limit results")
+	listCmd.Flags().IntVar(&offset, "offset", 0, "Offset results")
+
+	// Get account
+	getCmd := &cobra.Command{
+		Use:   "get [id]",
+		Short: "Get account by ID",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			accountUC := usecase.NewAccountUseCase(
+				postgres.NewAccountRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			account, err := accountUC.GetAccount(ctx, args[0])
+			if err != nil {
+				fmt.Printf("❌ Account not found: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(account)
+			} else {
+				fmt.Printf("ID:       %s\n", account.ID)
+				fmt.Printf("Name:     %s\n", account.Name)
+				fmt.Printf("Currency: %s\n", account.Currency)
+				fmt.Printf("Balance:  %s\n", account.Balance.String())
+				fmt.Printf("Version:  %d\n", account.Version)
+			}
+		},
+	}
+
+	cmd.AddCommand(createCmd, listCmd, getCmd)
+	return cmd
+}
+
+// ============ TRANSFER COMMAND ============
+
+func transferCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "transfer",
+		Short: "Transfer management",
+	}
+
+	// Create transfer
+	var fromID, toID, amount, description string
+	createCmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new transfer",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			txManager := postgres.NewTxManager(pool)
+			transferUC := usecase.NewTransferUseCase(
+				txManager,
+				postgres.NewAccountRepository(pool),
+				postgres.NewTransferRepository(pool),
+				postgres.NewEntryRepository(pool),
+				postgres.NewOutboxRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			amt, err := decimal.NewFromString(amount)
+			if err != nil {
+				fmt.Printf("❌ Invalid amount: %v\n", err)
+				os.Exit(1)
+			}
+
+			transfer, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
+				FromAccountID: fromID,
+				ToAccountID:   toID,
+				Amount:        amt,
+			})
+			if err != nil {
+				fmt.Printf("❌ Failed to create transfer: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(transfer)
+			} else {
+				fmt.Printf("✅ Transfer created: %s\n", transfer.ID)
+				fmt.Printf("   From: %s\n", transfer.FromAccountID)
+				fmt.Printf("   To:   %s\n", transfer.ToAccountID)
+				fmt.Printf("   Amount: %s\n", transfer.Amount.String())
+			}
+		},
+	}
+	createCmd.Flags().StringVar(&fromID, "from", "", "Source account ID (required)")
+	createCmd.Flags().StringVar(&toID, "to", "", "Destination account ID (required)")
+	createCmd.Flags().StringVar(&amount, "amount", "", "Transfer amount (required)")
+	createCmd.Flags().StringVar(&description, "description", "", "Transfer description")
+	createCmd.MarkFlagRequired("from")
+	createCmd.MarkFlagRequired("to")
+	createCmd.MarkFlagRequired("amount")
+
+	// Get transfer
+	getCmd := &cobra.Command{
+		Use:   "get [id]",
+		Short: "Get transfer by ID",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			txManager := postgres.NewTxManager(pool)
+			transferUC := usecase.NewTransferUseCase(
+				txManager,
+				postgres.NewAccountRepository(pool),
+				postgres.NewTransferRepository(pool),
+				postgres.NewEntryRepository(pool),
+				postgres.NewOutboxRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			transfer, err := transferUC.GetTransfer(ctx, args[0])
+			if err != nil {
+				fmt.Printf("❌ Transfer not found: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(transfer)
+			} else {
+				fmt.Printf("ID:     %s\n", transfer.ID)
+				fmt.Printf("From:   %s\n", transfer.FromAccountID)
+				fmt.Printf("To:     %s\n", transfer.ToAccountID)
+				fmt.Printf("Amount: %s\n", transfer.Amount.String())
+			}
+		},
+	}
+
+	cmd.AddCommand(createCmd, getCmd)
+	return cmd
+}
+
+// ============ HOLD COMMAND ============
+
+func holdCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "hold",
+		Short: "Hold management",
+	}
+
+	// Create hold
+	var accountID, amount, description string
+	createCmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new hold",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			txManager := postgres.NewTxManager(pool)
+			holdUC := usecase.NewHoldUseCase(
+				txManager,
+				postgres.NewAccountRepository(pool),
+				postgres.NewHoldRepository(pool),
+				postgres.NewTransferRepository(pool),
+				postgres.NewEntryRepository(pool),
+				postgres.NewOutboxRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			amt, err := decimal.NewFromString(amount)
+			if err != nil {
+				fmt.Printf("❌ Invalid amount: %v\n", err)
+				os.Exit(1)
+			}
+
+			hold, err := holdUC.HoldFunds(ctx, accountID, amt)
+			if err != nil {
+				fmt.Printf("❌ Failed to create hold: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(hold)
+			} else {
+				fmt.Printf("✅ Hold created: %s\n", hold.ID)
+				fmt.Printf("   Account: %s\n", hold.AccountID)
+				fmt.Printf("   Amount: %s\n", hold.Amount.String())
+			}
+		},
+	}
+	createCmd.Flags().StringVar(&accountID, "account", "", "Account ID (required)")
+	createCmd.Flags().StringVar(&amount, "amount", "", "Hold amount (required)")
+	createCmd.Flags().StringVar(&description, "description", "", "Hold description")
+	createCmd.MarkFlagRequired("account")
+	createCmd.MarkFlagRequired("amount")
+
+	// Capture hold
+	var captureToID string
+	captureCmd := &cobra.Command{
+		Use:   "capture [hold-id]",
+		Short: "Capture a hold (execute the transfer)",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			txManager := postgres.NewTxManager(pool)
+			holdUC := usecase.NewHoldUseCase(
+				txManager,
+				postgres.NewAccountRepository(pool),
+				postgres.NewHoldRepository(pool),
+				postgres.NewTransferRepository(pool),
+				postgres.NewEntryRepository(pool),
+				postgres.NewOutboxRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			transfer, err := holdUC.CaptureHold(ctx, args[0], captureToID)
+			if err != nil {
+				fmt.Printf("❌ Failed to capture hold: %v\n", err)
+				os.Exit(1)
+			}
+
+			if jsonOutput {
+				printJSON(transfer)
+			} else {
+				fmt.Printf("✅ Hold captured, transfer created: %s\n", transfer.ID)
+			}
+		},
+	}
+	captureCmd.Flags().StringVar(&captureToID, "to", "", "Destination account ID (required)")
+	captureCmd.MarkFlagRequired("to")
+
+	// Void hold
+	voidCmd := &cobra.Command{
+		Use:   "void [hold-id]",
+		Short: "Void a hold (cancel it)",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+
+			txManager := postgres.NewTxManager(pool)
+			holdUC := usecase.NewHoldUseCase(
+				txManager,
+				postgres.NewAccountRepository(pool),
+				postgres.NewHoldRepository(pool),
+				postgres.NewTransferRepository(pool),
+				postgres.NewEntryRepository(pool),
+				postgres.NewOutboxRepository(pool),
+				postgres.NewULIDGenerator(),
+			)
+
+			if err := holdUC.VoidHold(ctx, args[0]); err != nil {
+				fmt.Printf("❌ Failed to void hold: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("✅ Hold voided: %s\n", args[0])
+		},
+	}
+
+	cmd.AddCommand(createCmd, captureCmd, voidCmd)
+	return cmd
+}
+
 // ============ LEDGER COMMAND ============
 
 func ledgerCmd() *cobra.Command {
@@ -232,33 +588,15 @@ func ledgerCmd() *cobra.Command {
 		Use:   "consistency",
 		Short: "Check ledger consistency",
 		Run: func(cmd *cobra.Command, args []string) {
-			checkConsistency()
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+			checkConsistency(pool)
 		},
 	}
 
 	cmd.AddCommand(consistencyCmd)
 	return cmd
-}
-
-// ============ SERVE COMMAND ============
-
-func serveCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "serve",
-		Short: "Start the HTTP/gRPC server",
-		Long:  `Start the GoLedger HTTP and gRPC server. Uses environment variables for configuration.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("🚀 Starting GoLedger server...")
-			fmt.Println("   Use 'go run ./cmd/server' or the compiled server binary")
-			fmt.Println("   Environment variables:")
-			fmt.Println("     DATABASE_URL  - PostgreSQL connection string")
-			fmt.Println("     REDIS_URL     - Redis connection string")
-			fmt.Println("     HTTP_PORT     - HTTP port (default: 8080)")
-			fmt.Println("     GRPC_PORT     - gRPC port (default: 50051)")
-			fmt.Println("     JWT_SECRET    - JWT signing secret")
-			fmt.Println("     AUTH_ENABLED  - Enable authentication (default: false)")
-		},
-	}
 }
 
 // ============ HASH PASSWORD COMMAND ============
@@ -325,30 +663,23 @@ func createUser(ctx context.Context, pool *pgxpool.Pool, email, name, password, 
 	return userRepo.Create(ctx, user)
 }
 
-func checkConsistency() {
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(baseURL + "/api/v1/ledger/consistency")
+func checkConsistency(pool *pgxpool.Pool) {
+	ctx := context.Background()
+	ledgerRepo := postgres.NewLedgerRepository(pool)
+	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
+
+	consistent, err := ledgerUC.CheckConsistency(ctx)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("❌ Consistency check FAILED (Status: %d)\n%s\n", resp.StatusCode, string(body))
+		fmt.Printf("❌ Consistency check failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Printf("Failed to parse response: %v\n", err)
+	if consistent {
+		fmt.Println("✅ Ledger is consistent")
+	} else {
+		fmt.Println("❌ Ledger is NOT consistent")
 		os.Exit(1)
 	}
-
-	fmt.Println("✅ Consistency check PASSED")
-	fmt.Printf("Status: %s\n", result["status"])
 }
 
 func truncate(s string, n int) string {
@@ -356,4 +687,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func printJSON(v any) {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling JSON: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(data))
 }
