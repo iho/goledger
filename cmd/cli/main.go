@@ -242,6 +242,7 @@ func accountCmd() *cobra.Command {
 			accountUC := usecase.NewAccountUseCase(
 				postgres.NewAccountRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			account, err := accountUC.CreateAccount(ctx, usecase.CreateAccountInput{
@@ -283,6 +284,7 @@ func accountCmd() *cobra.Command {
 			accountUC := usecase.NewAccountUseCase(
 				postgres.NewAccountRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			accounts, err := accountUC.ListAccounts(ctx, usecase.ListAccountsInput{
@@ -321,6 +323,7 @@ func accountCmd() *cobra.Command {
 			accountUC := usecase.NewAccountUseCase(
 				postgres.NewAccountRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			account, err := accountUC.GetAccount(ctx, args[0])
@@ -371,6 +374,7 @@ func transferCmd() *cobra.Command {
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			amt, err := decimal.NewFromString(amount)
@@ -425,6 +429,7 @@ func transferCmd() *cobra.Command {
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			transfer, err := transferUC.GetTransfer(ctx, args[0])
@@ -475,6 +480,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			amt, err := decimal.NewFromString(amount)
@@ -524,6 +530,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			transfer, err := holdUC.CaptureHold(ctx, args[0], captureToID)
@@ -561,6 +568,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
 				postgres.NewULIDGenerator(),
+				nil,
 			)
 
 			if err := holdUC.VoidHold(ctx, args[0]); err != nil {

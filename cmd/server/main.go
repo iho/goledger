@@ -25,6 +25,7 @@ import (
 	"github.com/iho/goledger/internal/infrastructure/config"
 	"github.com/iho/goledger/internal/infrastructure/eventpublisher"
 	"github.com/iho/goledger/internal/infrastructure/logger"
+	"github.com/iho/goledger/internal/infrastructure/metrics"
 	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/redis"
 	"github.com/iho/goledger/internal/usecase"
@@ -45,6 +46,9 @@ func main() {
 	slog.SetDefault(l)
 
 	ctx := context.Background()
+
+	// Initialize metrics
+	m := metrics.New()
 
 	// Connect to PostgreSQL
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, cfg.DatabaseMaxConns, cfg.DatabaseMinConns)
@@ -86,12 +90,12 @@ func main() {
 
 	// Initialize use cases with retry support
 	retrier := postgresRepo.NewRetrier()
-	accountUC := usecase.NewAccountUseCase(accountRepo, idGen)
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen).
+	accountUC := usecase.NewAccountUseCase(accountRepo, idGen, m)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, m).
 		WithRetrier(retrier)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
-	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen, m)
 	userUC := usecase.NewUserUseCase(userRepo)
 
 	// Initialize handlers

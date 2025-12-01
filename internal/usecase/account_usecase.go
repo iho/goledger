@@ -7,19 +7,22 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/metrics"
 )
 
 // AccountUseCase handles account business logic.
 type AccountUseCase struct {
 	accountRepo AccountRepository
 	idGen       IDGenerator
+	metrics     *metrics.Metrics
 }
 
 // NewAccountUseCase creates a new AccountUseCase.
-func NewAccountUseCase(accountRepo AccountRepository, idGen IDGenerator) *AccountUseCase {
+func NewAccountUseCase(accountRepo AccountRepository, idGen IDGenerator, metrics *metrics.Metrics) *AccountUseCase {
 	return &AccountUseCase{
 		accountRepo: accountRepo,
 		idGen:       idGen,
+		metrics:     metrics,
 	}
 }
 
@@ -50,6 +53,10 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 	err := uc.accountRepo.Create(ctx, account)
 	if err != nil {
 		return nil, err
+	}
+
+	if uc.metrics != nil {
+		uc.metrics.AccountsCreated.Inc()
 	}
 
 	return account, nil

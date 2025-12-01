@@ -7,6 +7,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/metrics"
 )
 
 type HoldUseCase struct {
@@ -17,6 +18,7 @@ type HoldUseCase struct {
 	entryRepo    EntryRepository
 	outboxRepo   OutboxRepository
 	idGen        IDGenerator
+	metrics      *metrics.Metrics
 }
 
 func NewHoldUseCase(
@@ -27,6 +29,7 @@ func NewHoldUseCase(
 	entryRepo EntryRepository,
 	outboxRepo OutboxRepository,
 	idGen IDGenerator,
+	metrics *metrics.Metrics,
 ) *HoldUseCase {
 	return &HoldUseCase{
 		txManager:    txManager,
@@ -36,6 +39,7 @@ func NewHoldUseCase(
 		entryRepo:    entryRepo,
 		outboxRepo:   outboxRepo,
 		idGen:        idGen,
+		metrics:      metrics,
 	}
 }
 
@@ -107,10 +111,16 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		return nil, err
 	}
 
+	if uc.metrics != nil {
+		uc.metrics.HoldsCreated.Inc()
+		uc.metrics.HoldDuration.Observe(time.Since(now).Seconds())
+	}
+
 	return hold, nil
 }
 
 func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
+	start := time.Now()
 	// Add transaction timeout
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
 	defer cancel()
@@ -168,10 +178,20 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 		return err
 	}
 
-	return tx.Commit(txCtx)
+	if err := tx.Commit(txCtx); err != nil {
+		return err
+	}
+
+	if uc.metrics != nil {
+		uc.metrics.HoldsVoided.Inc()
+		uc.metrics.HoldDuration.Observe(time.Since(start).Seconds())
+	}
+
+	return nil
 }
 
 func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID string) (*domain.Transfer, error) {
+	start := time.Now()
 	// Add transaction timeout
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
 	defer cancel()
@@ -320,6 +340,11 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 
 	if err := tx.Commit(txCtx); err != nil {
 		return nil, err
+	}
+
+	if uc.metrics != nil {
+		uc.metrics.HoldsCaptured.Inc()
+		uc.metrics.HoldDuration.Observe(time.Since(start).Seconds())
 	}
 
 	return transfer, nil

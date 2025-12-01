@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/metrics"
 )
 
 // Retrier defines retry behavior for operations.
@@ -24,6 +25,7 @@ type TransferUseCase struct {
 	outboxRepo   OutboxRepository
 	idGen        IDGenerator
 	retrier      Retrier
+	metrics      *metrics.Metrics
 }
 
 // NewTransferUseCase creates a new TransferUseCase.
@@ -34,6 +36,7 @@ func NewTransferUseCase(
 	entryRepo EntryRepository,
 	outboxRepo OutboxRepository,
 	idGen IDGenerator,
+	metrics *metrics.Metrics,
 ) *TransferUseCase {
 	return &TransferUseCase{
 		txManager:    txManager,
@@ -43,6 +46,7 @@ func NewTransferUseCase(
 		outboxRepo:   outboxRepo,
 		idGen:        idGen,
 		retrier:      &noopRetrier{},
+		metrics:      metrics,
 	}
 }
 
@@ -91,6 +95,8 @@ func (uc *TransferUseCase) CreateTransfer(ctx context.Context, input CreateTrans
 
 // CreateBatchTransfer creates multiple transfers atomically.
 func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input CreateBatchTransferInput) ([]*domain.Transfer, error) {
+	start := time.Now()
+
 	// 0. Validate inputs before starting transaction
 	for _, ti := range input.Transfers {
 		if ti.FromAccountID == ti.ToAccountID {
@@ -113,6 +119,21 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 		transfers, txErr = uc.executeTransferTransaction(ctx, input, accountIDs)
 		return txErr
 	})
+
+	if uc.metrics != nil {
+		duration := time.Since(start).Seconds()
+		uc.metrics.TransferDuration.Observe(duration)
+
+		if err != nil {
+			uc.metrics.TransferErrors.WithLabelValues("create_failed").Inc()
+		} else {
+			uc.metrics.TransfersCreated.Add(float64(len(transfers)))
+			for _, t := range transfers {
+				val, _ := t.Amount.Float64()
+				uc.metrics.TransferAmount.Observe(val)
+			}
+		}
+	}
 
 	return transfers, err
 }
