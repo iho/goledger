@@ -1,4 +1,3 @@
-
 package config
 
 import (
@@ -31,6 +30,11 @@ type Config struct {
 
 	// Idempotency
 	IdempotencyTTL time.Duration `env:"IDEMPOTENCY_TTL" envDefault:"24h"`
+
+	// Authentication (optional - leave empty to disable)
+	JWTSecret     string        `env:"JWT_SECRET"       envDefault:""`
+	JWTExpiration time.Duration `env:"JWT_EXPIRATION"   envDefault:"24h"`
+	AuthEnabled   bool          `env:"AUTH_ENABLED"     envDefault:"false"`
 }
 
 // Load loads configuration from environment variables.

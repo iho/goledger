@@ -1,4 +1,3 @@
-
 package usecase
 
 import (
