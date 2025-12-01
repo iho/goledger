@@ -1,22 +1,31 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/auth"
+	"github.com/iho/goledger/internal/usecase"
 )
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
 	jwtManager *auth.JWTManager
+	userUC     UserAuthenticator
+}
+
+// UserAuthenticator interface for user authentication
+type UserAuthenticator interface {
+	Authenticate(ctx context.Context, input usecase.AuthenticateInput) (*domain.User, error)
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(jwtManager *auth.JWTManager) *AuthHandler {
+func NewAuthHandler(jwtManager *auth.JWTManager, userUC UserAuthenticator) *AuthHandler {
 	return &AuthHandler{
 		jwtManager: jwtManager,
+		userUC:     userUC,
 	}
 }
 
@@ -39,8 +48,7 @@ type UserInfo struct {
 	Role  domain.Role `json:"role"`
 }
 
-// Login handles user login (simplified - no password hashing for demo)
-// In production, this would validate against a user database with hashed passwords
+// Login handles user login with real authentication
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -48,47 +56,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// DEMO ONLY: Hardcoded users for testing
-	// In production, validate against database with bcrypt password hashing
-	var user *domain.User
-	switch req.Email {
-	case "admin@goledger.io":
-		if req.Password != "admin123" { // DEMO ONLY - never hardcode passwords!
-			writeError(w, http.StatusUnauthorized, "invalid credentials", "")
-			return
-		}
-		user = &domain.User{
-			ID:     "user-admin-1",
-			Email:  "admin@goledger.io",
-			Name:   "Admin User",
-			Role:   domain.RoleAdmin,
-			Active: true,
-		}
-	case "operator@goledger.io":
-		if req.Password != "operator123" {
-			writeError(w, http.StatusUnauthorized, "invalid credentials", "")
-			return
-		}
-		user = &domain.User{
-			ID:     "user-operator-1",
-			Email:  "operator@goledger.io",
-			Name:   "Operator User",
-			Role:   domain.RoleOperator,
-			Active: true,
-		}
-	case "viewer@goledger.io":
-		if req.Password != "viewer123" {
-			writeError(w, http.StatusUnauthorized, "invalid credentials", "")
-			return
-		}
-		user = &domain.User{
-			ID:     "user-viewer-1",
-			Email:  "viewer@goledger.io",
-			Name:   "Viewer User",
-			Role:   domain.RoleViewer,
-			Active: true,
-		}
-	default:
+	// Authenticate user using UserUseCase
+	user, err := h.userUC.Authenticate(context.Background(), usecase.AuthenticateInput{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid credentials", "")
 		return
 	}

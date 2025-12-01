@@ -71,7 +71,7 @@ func (r *AuditRepository) Create(log *domain.AuditLog) error {
 }
 
 // List retrieves audit logs with filtering
-func (r *AuditRepository) List(filter domain.AuditFilter) ([]*domain.AuditLog, error) {
+func (r *AuditRepository) List(filter *domain.AuditFilter) ([]*domain.AuditLog, error) {
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
 		       ip_address, user_agent, request_id,
@@ -159,7 +159,7 @@ func (r *AuditRepository) List(filter domain.AuditFilter) ([]*domain.AuditLog, e
 
 // GetByResourceID retrieves all audit logs for a specific resource
 func (r *AuditRepository) GetByResourceID(resourceType, resourceID string) ([]*domain.AuditLog, error) {
-	return r.List(domain.AuditFilter{
+	return r.List(&domain.AuditFilter{
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
 	})

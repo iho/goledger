@@ -21,7 +21,7 @@ func NewLedgerRepository(pool *pgxpool.Pool) *LedgerRepository {
 }
 
 // CheckConsistency checks the consistency of the ledger.
-func (r *LedgerRepository) CheckConsistency(ctx context.Context) (decimal.Decimal, decimal.Decimal, error) {
+func (r *LedgerRepository) CheckConsistency(ctx context.Context) (totalDebits decimal.Decimal, totalCredits decimal.Decimal, err error) {
 	q := generated.New(r.pool)
 	result, err := q.CheckLedgerConsistency(ctx)
 	if err != nil {

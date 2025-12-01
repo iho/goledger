@@ -141,7 +141,7 @@ func ValidatePassword(password string) error {
 	// Check for at least one uppercase, one lowercase, and one number
 	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
 	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasNumber := regexp.MustCompile(`\d`).MatchString(password)
 
 	if !hasUpper || !hasLower || !hasNumber {
 		return fmt.Errorf("%w: must contain uppercase, lowercase, and numbers", ErrPasswordTooWeak)
@@ -151,21 +151,24 @@ func ValidatePassword(password string) error {
 }
 
 // ValidatePagination validates and limits pagination parameters
-func ValidatePagination(limit, offset int) (int, int, error) {
+func ValidatePagination(limit, offset int) (validLimit int, validOffset int, err error) {
 	const MaxPageSize = 1000
 	const DefaultPageSize = 50
 
-	if limit <= 0 {
-		limit = DefaultPageSize
+	validLimit = limit
+	validOffset = offset
+
+	if validLimit <= 0 {
+		validLimit = DefaultPageSize
 	}
 
-	if limit > MaxPageSize {
-		limit = MaxPageSize
+	if validLimit > MaxPageSize {
+		validLimit = MaxPageSize
 	}
 
-	if offset < 0 {
-		offset = 0
+	if validOffset < 0 {
+		validOffset = 0
 	}
 
-	return limit, offset, nil
+	return
 }

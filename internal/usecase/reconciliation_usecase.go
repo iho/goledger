@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/iho/goledger/internal/domain"
 	"github.com/shopspring/decimal"
 )
 
@@ -61,8 +62,9 @@ func (uc *ReconciliationUseCase) ReconcileAccount(ctx context.Context, accountID
 
 // ReconcileAllAccounts reconciles all accounts in the system
 func (uc *ReconciliationUseCase) ReconcileAllAccounts(ctx context.Context) ([]*ReconciliationResult, error) {
-	// Get all accounts
-	accounts, err := uc.accountRepo.List(ctx, 10000, 0) // High limit for reconciliation
+	// Get all accounts (use high limit for reconciliation)
+	limit, offset, _ := domain.ValidatePagination(10000, 0)
+	accounts, err := uc.accountRepo.List(ctx, limit, offset)
 	if err != nil {
 		return nil, err
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	postgresRepo "github.com/iho/goledger/internal/adapter/repository/postgres"
 	redisRepo "github.com/iho/goledger/internal/adapter/repository/redis"
+	"github.com/iho/goledger/internal/infrastructure/auth"
 	"github.com/iho/goledger/internal/infrastructure/config"
 	"github.com/iho/goledger/internal/infrastructure/eventpublisher"
 	"github.com/iho/goledger/internal/infrastructure/logger"
@@ -79,6 +80,7 @@ func main() {
 	ledgerRepo := postgresRepo.NewLedgerRepository(pool)
 	holdRepo := postgresRepo.NewHoldRepository(pool)
 	outboxRepo := postgresRepo.NewOutboxRepository(pool)
+	userRepo := postgresRepo.NewUserRepository(pool)
 	idempotencyStore := redisRepo.NewIdempotencyStore(redisClient)
 	idGen := postgresRepo.NewULIDGenerator()
 
@@ -90,6 +92,7 @@ func main() {
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
 	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen)
+	userUC := usecase.NewUserUseCase(userRepo)
 
 	// Initialize handlers
 	accountHandler := handler.NewAccountHandler(accountUC)
@@ -99,6 +102,10 @@ func main() {
 	holdHandler := handler.NewHoldHandler(holdUC)
 	healthHandler := handler.NewHealthHandler(pool, redisClient)
 
+	// Create JWT manager for authentication
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiration)
+	authHandler := handler.NewAuthHandler(jwtManager, userUC)
+
 	// Create router
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
 		AccountHandler:   accountHandler,
@@ -107,6 +114,7 @@ func main() {
 		HealthHandler:    healthHandler,
 		LedgerHandler:    ledgerHandler,
 		HoldHandler:      holdHandler,
+		AuthHandler:      authHandler,
 		IdempotencyStore: idempotencyStore,
 		Logger:           l,
 	})

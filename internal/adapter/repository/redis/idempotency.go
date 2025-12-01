@@ -23,7 +23,7 @@ func NewIdempotencyStore(client *redis.Client) *IdempotencyStore {
 }
 
 // CheckAndSet atomically checks if key exists, sets if not.
-func (s *IdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (bool, []byte, error) {
+func (s *IdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, cachedResponse []byte, err error) {
 	fullKey := s.prefix + key
 
 	// Try to get existing

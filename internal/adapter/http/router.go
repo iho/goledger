@@ -23,6 +23,7 @@ type RouterConfig struct {
 	HealthHandler    *handler.HealthHandler
 	LedgerHandler    *handler.LedgerHandler
 	HoldHandler      *handler.HoldHandler
+	AuthHandler      *handler.AuthHandler
 	IdempotencyStore usecase.IdempotencyStore
 	Logger           *slog.Logger
 }
@@ -53,6 +54,12 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		if cfg.IdempotencyStore != nil {
 			idempotencyMiddleware := middleware.NewIdempotencyMiddleware(cfg.IdempotencyStore)
 			r.Use(idempotencyMiddleware.Wrap)
+		}
+
+		// Authentication endpoints (public)
+		if cfg.AuthHandler != nil {
+			r.Post("/auth/login", cfg.AuthHandler.Login)
+			r.Get("/auth/me", cfg.AuthHandler.GetCurrentUser)
 		}
 
 		// Ledger endpoints
