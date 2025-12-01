@@ -111,3 +111,43 @@ func TestAccountUseCase_ListAccounts(t *testing.T) {
 		t.Errorf("expected 2 accounts, got %d", len(accounts))
 	}
 }
+
+func TestAccountUseCase_CreateAccount_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	idGen.EXPECT().Generate().Return("test-id-123")
+	repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
+
+	uc := usecase.NewAccountUseCase(repo, idGen)
+
+	_, err := uc.CreateAccount(context.Background(), usecase.CreateAccountInput{
+		Name:     "test",
+		Currency: "USD",
+	})
+
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+func TestAccountUseCase_ListAccounts_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	repo := mocks.NewMockAccountRepository(ctrl)
+	idGen := mocks.NewMockIDGenerator(ctrl)
+
+	repo.EXPECT().List(gomock.Any(), 10, 0).Return(nil, errors.New("db error"))
+
+	uc := usecase.NewAccountUseCase(repo, idGen)
+
+	_, err := uc.ListAccounts(context.Background(), usecase.ListAccountsInput{Limit: 10, Offset: 0})
+
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}

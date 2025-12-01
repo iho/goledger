@@ -33,12 +33,16 @@ run: build
 
 # Run unit tests
 test:
-	go test -v -race ./internal/domain/... ./internal/usecase/...
+	gotestsum --format testdox -- -race ./internal/domain/... ./internal/usecase/...
 
 # Run integration tests (requires Docker)
 test-integration: docker-up
 	sleep 2
-	go test -v -race ./tests/integration/...
+	gotestsum --format testdox -- -race ./tests/integration/...
+
+# Run all tests
+test-all:
+	gotestsum --format testdox -- -race ./...
 
 # Run tests in Docker
 test-docker:
@@ -47,12 +51,8 @@ test-docker:
 
 # Run all tests with coverage
 test-coverage:
-	go test -v -race -coverprofile=coverage.out ./...
+	gotestsum --format testdox -- -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
-
-# Run tests with race detector
-test-race:
-	go test -v -race ./...
 
 # Start development environment
 docker-up:
