@@ -31,7 +31,7 @@ func TestConcurrentTransfers(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 
 	outboxRepo := postgres.NewNullOutboxRepository()
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
 
 	t.Run("100 concurrent transfers from same account no overdraft", func(t *testing.T) {
 		testDB.TruncateAll(ctx)

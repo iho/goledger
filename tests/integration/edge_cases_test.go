@@ -38,9 +38,9 @@ func TestEdgeCases(t *testing.T) {
 	txManager := postgres.NewTxManager(pool)
 	idGen := postgres.NewULIDGenerator()
 
-	accountUC := usecase.NewAccountUseCase(accountRepo, idGen)
+	accountUC := usecase.NewAccountUseCase(accountRepo, idGen, nil)
 	outboxRepo := postgres.NewNullOutboxRepository()
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 
 	redisURL := os.Getenv("REDIS_URL")

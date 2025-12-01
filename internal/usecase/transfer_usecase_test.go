@@ -38,7 +38,7 @@ func TestTransferUseCase_CreateTransfer(t *testing.T) {
 	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, idGen)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, idGen, nil)
 
 	transfer, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
@@ -64,7 +64,7 @@ func TestTransferUseCase_RejectSameAccount(t *testing.T) {
 	txMgr := mocks.NewMockTransactionManager(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen, nil)
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-1",
@@ -86,7 +86,7 @@ func TestTransferUseCase_RejectZeroAmount(t *testing.T) {
 	txMgr := mocks.NewMockTransactionManager(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen, nil)
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-2",
@@ -110,7 +110,7 @@ func TestTransferUseCase_GetTransfer(t *testing.T) {
 		Amount:        decimal.NewFromInt(100),
 	}, nil)
 
-	uc := usecase.NewTransferUseCase(nil, nil, txRepo, nil, nil, nil)
+	uc := usecase.NewTransferUseCase(nil, nil, txRepo, nil, nil, nil, nil)
 
 	transfer, err := uc.GetTransfer(context.Background(), "tx-123")
 	if err != nil {
@@ -126,7 +126,7 @@ func TestTransferUseCase_RejectNegativeAmount(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	uc := usecase.NewTransferUseCase(nil, nil, nil, nil, nil, nil)
+	uc := usecase.NewTransferUseCase(nil, nil, nil, nil, nil, nil, nil)
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-2",
@@ -156,7 +156,7 @@ func TestTransferUseCase_CurrencyMismatch(t *testing.T) {
 	}, nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen, nil)
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-2",
@@ -186,7 +186,7 @@ func TestTransferUseCase_InsufficientBalance(t *testing.T) {
 	}, nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, mocks.NewMockOutboxRepository(ctrl), idGen, nil)
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
 		ToAccountID:   "acc-2",
@@ -208,7 +208,7 @@ func TestTransferUseCase_ListByAccount(t *testing.T) {
 		{ID: "tx-2", FromAccountID: "acc-2", ToAccountID: "acc-1", Amount: decimal.NewFromInt(50)},
 	}, nil)
 
-	uc := usecase.NewTransferUseCase(nil, nil, txRepo, nil, nil, nil)
+	uc := usecase.NewTransferUseCase(nil, nil, txRepo, nil, nil, nil, nil)
 
 	transfers, err := uc.ListTransfersByAccount(context.Background(), usecase.ListTransfersByAccountInput{
 		AccountID: "acc-1",
