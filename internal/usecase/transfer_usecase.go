@@ -132,7 +132,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(txCtx)
+	defer func() { _ = tx.Rollback(txCtx) }()
 
 	// 3. Lock accounts in sorted order
 	accounts, err := uc.accountRepo.GetByIDsForUpdate(txCtx, tx, accountIDs)
@@ -154,7 +154,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 		eventAt = *input.EventAt
 	}
 
-	var transfers []*domain.Transfer
+	transfers := make([]*domain.Transfer, 0, len(input.Transfers))
 	for _, ti := range input.Transfers {
 		metadata := input.Metadata
 		if ti.Metadata != nil {
@@ -399,7 +399,7 @@ func (uc *TransferUseCase) ReverseTransfer(ctx context.Context, input ReverseTra
 		if txErr != nil {
 			return txErr
 		}
-		defer tx.Rollback(txCtx)
+		defer func() { _ = tx.Rollback(txCtx) }()
 
 		reversalTransfer, txErr = uc.executeReverseTransfer(txCtx, tx, reversalInput, originalTransfer.ID)
 		if txErr != nil {

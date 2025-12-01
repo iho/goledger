@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -202,11 +201,4 @@ func TestConcurrentTransfers(t *testing.T) {
 			t.Errorf("expected b balance 1000, got %s", bAcc.Balance)
 		}
 	})
-}
-
-func skipIfNoDatabase(t *testing.T) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping test")
-	}
 }

@@ -14,17 +14,16 @@ import (
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data) // Error handled by http.ResponseWriter
 }
 
 // writeError writes an error response.
-func writeError(w http.ResponseWriter, status int, message, details string) {
+func writeError(w http.ResponseWriter, status int, message string, detail string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(dto.ErrorResponse{
-		Error:   message,
-		Message: details,
-	})
+	_ = json.NewEncoder(w).Encode(dto.ErrorResponse{
+		Error: message,
+	}) // Error handled by http.ResponseWriter
 }
 
 // mapDomainError maps domain errors to HTTP status codes.

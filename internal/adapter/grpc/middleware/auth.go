@@ -47,9 +47,7 @@ func AuthInterceptor(jwtManager *auth.JWTManager) grpc.UnaryServerInterceptor {
 		accessToken := values[0]
 
 		// Remove "Bearer " prefix if present
-		if strings.HasPrefix(accessToken, "Bearer ") {
-			accessToken = strings.TrimPrefix(accessToken, "Bearer ")
-		}
+		accessToken = strings.TrimPrefix(accessToken, "Bearer ")
 
 		// Verify token
 		claims, err := jwtManager.Verify(accessToken)

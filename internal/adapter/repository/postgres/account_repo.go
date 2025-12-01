@@ -177,38 +177,3 @@ func numericToDecimal(n pgtype.Numeric) decimal.Decimal {
 func timeToPgTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
-
-func stringToUUID(s *string) pgtype.UUID {
-	if s == nil {
-		return pgtype.UUID{Valid: false}
-	}
-
-	var u pgtype.UUID
-	_ = u.Scan(*s)
-
-	return u
-}
-
-func uuidToString(u pgtype.UUID) *string {
-	if !u.Valid {
-		return nil
-	}
-
-	s := u.Bytes[:]
-	str := ""
-	for i, b := range s {
-		if i == 4 || i == 6 || i == 8 || i == 10 {
-			str += "-"
-		}
-		str += string([]byte{hexDigit(b >> 4), hexDigit(b & 0x0F)})
-	}
-
-	return &str
-}
-
-func hexDigit(n byte) byte {
-	if n < 10 {
-		return '0' + n
-	}
-	return 'a' + n - 10
-}

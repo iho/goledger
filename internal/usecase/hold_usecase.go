@@ -52,7 +52,7 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(txCtx)
+	defer func() { _ = tx.Rollback(txCtx) }()
 
 	// Lock account
 	account, err := uc.accountRepo.GetByIDForUpdate(txCtx, tx, accountID)
@@ -119,7 +119,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(txCtx)
+	defer func() { _ = tx.Rollback(txCtx) }()
 
 	hold, err := uc.holdRepo.GetByIDForUpdate(txCtx, tx, holdID)
 	if err != nil {
@@ -171,7 +171,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	return tx.Commit(txCtx)
 }
 
-func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccountID string) (*domain.Transfer, error) {
+func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID string) (*domain.Transfer, error) {
 	// Add transaction timeout
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
 	defer cancel()
@@ -180,7 +180,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(txCtx)
+	defer func() { _ = tx.Rollback(txCtx) }()
 
 	hold, err := uc.holdRepo.GetByIDForUpdate(txCtx, tx, holdID)
 	if err != nil {

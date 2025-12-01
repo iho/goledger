@@ -50,7 +50,7 @@ func (m *IdempotencyMiddleware) Wrap(next http.Handler) http.Handler {
 			// Return cached response
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Idempotency-Replay", "true")
-			w.Write(cachedResponse)
+			_, _ = w.Write(cachedResponse) // Best effort - response already sent
 
 			return
 		}
@@ -65,7 +65,7 @@ func (m *IdempotencyMiddleware) Wrap(next http.Handler) http.Handler {
 
 		// Store response for future idempotent requests
 		if recorder.statusCode >= 200 && recorder.statusCode < 300 {
-			m.store.Update(r.Context(), key, recorder.body.Bytes(), idempotencyTTL)
+			_ = m.store.Update(r.Context(), key, recorder.body.Bytes(), idempotencyTTL) // Best effort cache update
 		}
 	})
 }

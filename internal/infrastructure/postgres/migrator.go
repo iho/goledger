@@ -12,7 +12,7 @@ import (
 )
 
 // RunMigrations runs database migrations.
-func RunMigrations(databaseURL string, migrationsPath string) error {
+func RunMigrations(databaseURL, migrationsPath string) error {
 	m, err := migrate.New(
 		"file://"+migrationsPath,
 		databaseURL,
