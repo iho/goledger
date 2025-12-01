@@ -49,6 +49,15 @@ type HoldRepository interface {
 	ListByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Hold, error)
 }
 
+// OutboxRepository defines data access for outbox events.
+type OutboxRepository interface {
+	Create(ctx context.Context, tx Transaction, event *domain.OutboxEvent) error
+	GetUnpublished(ctx context.Context, limit int) ([]*domain.OutboxEvent, error)
+	MarkPublished(ctx context.Context, id string, publishedAt time.Time) error
+	GetByAggregate(ctx context.Context, aggregateType, aggregateID string, limit, offset int) ([]*domain.OutboxEvent, error)
+	DeletePublished(ctx context.Context, before time.Time) error
+}
+
 // Transaction represents a database transaction.
 type Transaction interface {
 	Commit(ctx context.Context) error

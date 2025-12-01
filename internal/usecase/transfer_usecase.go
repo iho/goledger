@@ -21,6 +21,7 @@ type TransferUseCase struct {
 	accountRepo  AccountRepository
 	transferRepo TransferRepository
 	entryRepo    EntryRepository
+	outboxRepo   OutboxRepository
 	idGen        IDGenerator
 	retrier      Retrier
 }
@@ -31,6 +32,7 @@ func NewTransferUseCase(
 	accountRepo AccountRepository,
 	transferRepo TransferRepository,
 	entryRepo EntryRepository,
+	outboxRepo OutboxRepository,
 	idGen IDGenerator,
 ) *TransferUseCase {
 	return &TransferUseCase{
@@ -38,6 +40,7 @@ func NewTransferUseCase(
 		accountRepo:  accountRepo,
 		transferRepo: transferRepo,
 		entryRepo:    entryRepo,
+		outboxRepo:   outboxRepo,
 		idGen:        idGen,
 		retrier:      &noopRetrier{},
 	}
@@ -276,6 +279,26 @@ func (uc *TransferUseCase) processTransfer(
 
 	toAccount.Balance = toNewBalance
 	toAccount.Version++
+
+	// Emit transfer created event
+	event := &domain.OutboxEvent{
+		ID:            uc.idGen.Generate(),
+		AggregateID:   transfer.ID,
+		AggregateType: domain.AggregateTypeTransfer,
+		EventType:     domain.EventTypeTransferCreated,
+		Payload: map[string]any{
+			"transfer_id":     transfer.ID,
+			"from_account_id": transfer.FromAccountID,
+			"to_account_id":   transfer.ToAccountID,
+			"amount":          transfer.Amount.String(),
+			"event_at":        transfer.EventAt.Format(time.RFC3339),
+		},
+		CreatedAt: now,
+		Published: false,
+	}
+	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
+		return nil, err
+	}
 
 	return transfer, nil
 }

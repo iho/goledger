@@ -1,4 +1,3 @@
-
 package integration
 
 import (
@@ -57,6 +56,7 @@ func TestAccountCreation(t *testing.T) {
 		accountRepo,
 		postgres.NewTransferRepository(pool),
 		postgres.NewEntryRepository(pool),
+		postgres.NewNullOutboxRepository(),
 		idGen,
 	)
 	entryUC := usecase.NewEntryUseCase(postgres.NewEntryRepository(pool))

@@ -43,6 +43,17 @@ type Hold struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type OutboxEvent struct {
+	ID            string             `json:"id"`
+	AggregateID   string             `json:"aggregate_id"`
+	AggregateType string             `json:"aggregate_type"`
+	EventType     string             `json:"event_type"`
+	Payload       []byte             `json:"payload"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	PublishedAt   pgtype.Timestamptz `json:"published_at"`
+	Published     bool               `json:"published"`
+}
+
 type Transfer struct {
 	ID                 string             `json:"id"`
 	FromAccountID      string             `json:"from_account_id"`

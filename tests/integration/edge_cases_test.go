@@ -1,4 +1,3 @@
-
 package integration
 
 import (
@@ -40,7 +39,8 @@ func TestEdgeCases(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 
 	accountUC := usecase.NewAccountUseCase(accountRepo, idGen)
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 
 	redisURL := os.Getenv("REDIS_URL")

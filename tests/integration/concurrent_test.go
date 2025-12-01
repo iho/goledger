@@ -1,4 +1,3 @@
-
 package integration
 
 import (
@@ -32,7 +31,8 @@ func TestConcurrentTransfers(t *testing.T) {
 	txManager := postgres.NewTxManager(pool)
 	idGen := postgres.NewULIDGenerator()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen)
 
 	t.Run("100 concurrent transfers from same account no overdraft", func(t *testing.T) {
 		testDB.TruncateAll(ctx)

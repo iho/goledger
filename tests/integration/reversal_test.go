@@ -28,7 +28,8 @@ func TestReverseTransfer(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen).WithRetrier(retrier)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen).WithRetrier(retrier)
 
 	// Create accounts with balance
 	initialBalance := decimal.NewFromInt(1000)
@@ -140,7 +141,8 @@ func TestReverseTransferTwice(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen).WithRetrier(retrier)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen).WithRetrier(retrier)
 
 	// Create accounts and fund account 1
 	acc1 := testDB.CreateTestAccountWithBalance(ctx, "acc1", "USD", decimal.NewFromInt(1000), false, true)
@@ -190,7 +192,8 @@ func TestReverseTransferInsufficientBalance(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen).WithRetrier(retrier)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen).WithRetrier(retrier)
 
 	// Create accounts
 	acc1 := testDB.CreateTestAccountWithBalance(ctx, "acc1", "USD", decimal.NewFromInt(1000), false, true)
@@ -242,7 +245,8 @@ func TestReverseNonExistentTransfer(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, idGen).WithRetrier(retrier)
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen).WithRetrier(retrier)
 
 	// Try to reverse a non-existent transfer
 	_, err := transferUC.ReverseTransfer(ctx, usecase.ReverseTransferInput{

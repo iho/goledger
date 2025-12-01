@@ -434,6 +434,102 @@ func (mr *MockHoldRepositoryMockRecorder) UpdateStatus(ctx, tx, id, status, upda
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStatus", reflect.TypeOf((*MockHoldRepository)(nil).UpdateStatus), ctx, tx, id, status, updatedAt)
 }
 
+// MockOutboxRepository is a mock of OutboxRepository interface.
+type MockOutboxRepository struct {
+	ctrl     *gomock.Controller
+	recorder *MockOutboxRepositoryMockRecorder
+	isgomock struct{}
+}
+
+// MockOutboxRepositoryMockRecorder is the mock recorder for MockOutboxRepository.
+type MockOutboxRepositoryMockRecorder struct {
+	mock *MockOutboxRepository
+}
+
+// NewMockOutboxRepository creates a new mock instance.
+func NewMockOutboxRepository(ctrl *gomock.Controller) *MockOutboxRepository {
+	mock := &MockOutboxRepository{ctrl: ctrl}
+	mock.recorder = &MockOutboxRepositoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockOutboxRepository) EXPECT() *MockOutboxRepositoryMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockOutboxRepository) Create(ctx context.Context, tx usecase.Transaction, event *domain.OutboxEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, tx, event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockOutboxRepositoryMockRecorder) Create(ctx, tx, event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockOutboxRepository)(nil).Create), ctx, tx, event)
+}
+
+// DeletePublished mocks base method.
+func (m *MockOutboxRepository) DeletePublished(ctx context.Context, before time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePublished", ctx, before)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeletePublished indicates an expected call of DeletePublished.
+func (mr *MockOutboxRepositoryMockRecorder) DeletePublished(ctx, before any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePublished", reflect.TypeOf((*MockOutboxRepository)(nil).DeletePublished), ctx, before)
+}
+
+// GetByAggregate mocks base method.
+func (m *MockOutboxRepository) GetByAggregate(ctx context.Context, aggregateType, aggregateID string, limit, offset int) ([]*domain.OutboxEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByAggregate", ctx, aggregateType, aggregateID, limit, offset)
+	ret0, _ := ret[0].([]*domain.OutboxEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByAggregate indicates an expected call of GetByAggregate.
+func (mr *MockOutboxRepositoryMockRecorder) GetByAggregate(ctx, aggregateType, aggregateID, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByAggregate", reflect.TypeOf((*MockOutboxRepository)(nil).GetByAggregate), ctx, aggregateType, aggregateID, limit, offset)
+}
+
+// GetUnpublished mocks base method.
+func (m *MockOutboxRepository) GetUnpublished(ctx context.Context, limit int) ([]*domain.OutboxEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUnpublished", ctx, limit)
+	ret0, _ := ret[0].([]*domain.OutboxEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUnpublished indicates an expected call of GetUnpublished.
+func (mr *MockOutboxRepositoryMockRecorder) GetUnpublished(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnpublished", reflect.TypeOf((*MockOutboxRepository)(nil).GetUnpublished), ctx, limit)
+}
+
+// MarkPublished mocks base method.
+func (m *MockOutboxRepository) MarkPublished(ctx context.Context, id string, publishedAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkPublished", ctx, id, publishedAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkPublished indicates an expected call of MarkPublished.
+func (mr *MockOutboxRepositoryMockRecorder) MarkPublished(ctx, id, publishedAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPublished", reflect.TypeOf((*MockOutboxRepository)(nil).MarkPublished), ctx, id, publishedAt)
+}
+
 // MockTransaction is a mock of Transaction interface.
 type MockTransaction struct {
 	ctrl     *gomock.Controller
