@@ -8,6 +8,7 @@ import (
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	"github.com/iho/goledger/internal/adapter/http/middleware"
 	"github.com/iho/goledger/internal/usecase"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // RouterConfig holds dependencies for the router.
@@ -26,12 +27,14 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
+	r.Use(middleware.Metrics)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 
-	// Health endpoints
+	// Health & metrics endpoints
 	r.Get("/health", cfg.HealthHandler.Liveness)
 	r.Get("/ready", cfg.HealthHandler.Readiness)
+	r.Handle("/metrics", promhttp.Handler())
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {

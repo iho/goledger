@@ -18,13 +18,18 @@ type Config struct {
 	RedisURL string `env:"REDIS_URL" envDefault:"redis://localhost:6379"`
 
 	// HTTP Server
-	HTTPPort         string        `env:"HTTP_PORT" envDefault:"8080"`
-	HTTPReadTimeout  time.Duration `env:"HTTP_READ_TIMEOUT" envDefault:"30s"`
-	HTTPWriteTimeout time.Duration `env:"HTTP_WRITE_TIMEOUT" envDefault:"30s"`
+	HTTPPort            string        `env:"HTTP_PORT" envDefault:"8080"`
+	HTTPReadTimeout     time.Duration `env:"HTTP_READ_TIMEOUT" envDefault:"30s"`
+	HTTPWriteTimeout    time.Duration `env:"HTTP_WRITE_TIMEOUT" envDefault:"30s"`
+	HTTPIdleTimeout     time.Duration `env:"HTTP_IDLE_TIMEOUT" envDefault:"60s"`
+	HTTPShutdownTimeout time.Duration `env:"HTTP_SHUTDOWN_TIMEOUT" envDefault:"10s"`
 
 	// Logging
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
+
+	// Idempotency
+	IdempotencyTTL time.Duration `env:"IDEMPOTENCY_TTL" envDefault:"24h"`
 }
 
 // Load loads configuration from environment variables.
