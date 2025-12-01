@@ -15,6 +15,7 @@ import (
 	postgresRepo "github.com/iho/goledger/internal/adapter/repository/postgres"
 	redisRepo "github.com/iho/goledger/internal/adapter/repository/redis"
 	"github.com/iho/goledger/internal/infrastructure/config"
+	"github.com/iho/goledger/internal/infrastructure/eventpublisher"
 	"github.com/iho/goledger/internal/infrastructure/logger"
 	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/redis"
@@ -81,7 +82,7 @@ func main() {
 		WithRetrier(retrier)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
-	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, idGen)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen)
 
 	// Initialize handlers
 	accountHandler := handler.NewAccountHandler(accountUC)
@@ -102,6 +103,23 @@ func main() {
 		IdempotencyStore: idempotencyStore,
 		Logger:           l,
 	})
+
+	// Create event publisher worker
+	eventPublisher := eventpublisher.NewEventPublisher(eventpublisher.Config{
+		OutboxRepo: outboxRepo,
+		Publisher:  eventpublisher.NewLogPublisher(l),
+		Logger:     l,
+	})
+
+	// Start event publisher in background
+	publisherCtx, cancelPublisher := context.WithCancel(context.Background())
+	defer cancelPublisher()
+
+	go func() {
+		if err := eventPublisher.Start(publisherCtx); err != nil && !errors.Is(err, context.Canceled) {
+			l.Error("event publisher stopped with error", "error", err)
+		}
+	}()
 
 	// Create server with timeouts
 	server := &http.Server{
@@ -134,6 +152,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
 	defer cancel()
 
+	// Stop event publisher first
+	cancelPublisher()
+	l.Info("event publisher stopped")
+
+	// Shutdown HTTP server
 	if err := server.Shutdown(ctx); err != nil {
 		l.Error("server forced to shutdown", "error", err)
 		os.Exit(1)

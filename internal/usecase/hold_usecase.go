@@ -15,6 +15,7 @@ type HoldUseCase struct {
 	holdRepo     HoldRepository
 	transferRepo TransferRepository
 	entryRepo    EntryRepository
+	outboxRepo   OutboxRepository
 	idGen        IDGenerator
 }
 
@@ -24,6 +25,7 @@ func NewHoldUseCase(
 	holdRepo HoldRepository,
 	transferRepo TransferRepository,
 	entryRepo EntryRepository,
+	outboxRepo OutboxRepository,
 	idGen IDGenerator,
 ) *HoldUseCase {
 	return &HoldUseCase{
@@ -32,6 +34,7 @@ func NewHoldUseCase(
 		holdRepo:     holdRepo,
 		transferRepo: transferRepo,
 		entryRepo:    entryRepo,
+		outboxRepo:   outboxRepo,
 		idGen:        idGen,
 	}
 }
@@ -77,6 +80,25 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		return nil, err
 	}
 
+	// Emit hold created event
+	event := &domain.OutboxEvent{
+		ID:            uc.idGen.Generate(),
+		AggregateID:   hold.ID,
+		AggregateType: domain.AggregateTypeHold,
+		EventType:     domain.EventTypeHoldCreated,
+		Payload: map[string]any{
+			"hold_id":    hold.ID,
+			"account_id": hold.AccountID,
+			"amount":     hold.Amount.String(),
+			"currency":   account.Currency,
+		},
+		CreatedAt: now,
+		Published: false,
+	}
+	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -117,6 +139,24 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	}
 
 	if err := uc.accountRepo.UpdateEncumberedBalance(ctx, tx, hold.AccountID, newEncumbered, now); err != nil {
+		return err
+	}
+
+	// Emit hold voided event
+	event := &domain.OutboxEvent{
+		ID:            uc.idGen.Generate(),
+		AggregateID:   hold.ID,
+		AggregateType: domain.AggregateTypeHold,
+		EventType:     domain.EventTypeHoldVoided,
+		Payload: map[string]any{
+			"hold_id":    hold.ID,
+			"account_id": hold.AccountID,
+			"amount":     hold.Amount.String(),
+		},
+		CreatedAt: now,
+		Published: false,
+	}
+	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
 		return err
 	}
 
@@ -244,6 +284,25 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 
 	// Update Hold Status
 	if err := uc.holdRepo.UpdateStatus(ctx, tx, hold.ID, domain.HoldStatusCaptured, now); err != nil {
+		return nil, err
+	}
+
+	// Emit hold captured event
+	event := &domain.OutboxEvent{
+		ID:            uc.idGen.Generate(),
+		AggregateID:   hold.ID,
+		AggregateType: domain.AggregateTypeHold,
+		EventType:     domain.EventTypeHoldCaptured,
+		Payload: map[string]any{
+			"hold_id":       hold.ID,
+			"transfer_id":   transfer.ID,
+			"to_account_id": toAccountID,
+			"amount":        hold.Amount.String(),
+		},
+		CreatedAt: now,
+		Published: false,
+	}
+	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
 		return nil, err
 	}
 
