@@ -1,5 +1,8 @@
 # GoLedger
 
+![Go Version](https://img.shields.io/badge/go-1.24+-00ADD8.svg)
+![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
+
 A production-ready double-entry ledger implementation in Go with PostgreSQL and Redis.
 
 ## Features
@@ -9,8 +12,105 @@ A production-ready double-entry ledger implementation in Go with PostgreSQL and 
 - **Type-safe SQL** - Generated with sqlc
 - **Idempotency** - Redis-backed request deduplication
 - **Concurrent-safe** - Deadlock prevention via sorted account locking
-- **Observability** - Prometheus metrics, structured logging (zerolog)
+- **Observability** - Prometheus metrics, structured logging (slog)
 - **Production-ready** - Health checks, graceful shutdown, configurable timeouts
+- **CLI Tool** - Comprehensive command-line interface for management and setup
+
+## Quick Start
+
+### Automated Setup
+The easiest way to get started is using the setup script, which handles building, container startup, migrations, and user creation:
+
+```bash
+./scripts/setup-and-test.sh
+```
+
+### Manual Setup
+
+1. **Start Infrastructure**
+   ```bash
+   docker-compose -f docker-compose.full.yml up -d
+   ```
+
+2. **Build CLI**
+   ```bash
+   go build -o bin/cli ./cmd/cli
+   ```
+
+3. **Run Setup (Migrations + Admin)**
+   ```bash
+   export DATABASE_URL="postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable"
+   ./bin/cli setup --database-url "$DATABASE_URL"
+   ```
+
+## CLI Tool
+
+GoLedger comes with a powerful CLI for managing the system.
+
+```bash
+# Build the CLI
+go build -o bin/cli ./cmd/cli
+
+# Set DB URL (or use --database-url flag)
+export DATABASE_URL="postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable"
+```
+
+### Common Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `user create` | Create a new user | `./bin/cli user create --email u@x.com --password pass --role admin` |
+| `account create` | Create an account | `./bin/cli account create --name "Wallet" --currency USD` |
+| `account list` | List accounts | `./bin/cli account list` |
+| `transfer create` | Transfer funds | `./bin/cli transfer create --from [id] --to [id] --amount 100` |
+| `hold create` | Hold funds | `./bin/cli hold create --account [id] --amount 50` |
+| `migrate up` | Run DB migrations | `./bin/cli migrate up` |
+
+## Observability & Monitoring
+
+The system includes a pre-configured **Grafana** dashboard and **Prometheus** metrics.
+
+- **Grafana**: [http://localhost:3000](http://localhost:3000)
+  - **Credentials**: `admin` / `admin`
+  - **Dashboard**: Go to "Dashboards" -> "GoLedger Overview"
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)
+- **Metrics Endpoint**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
+
+### Dashboard Features
+- Real-time Transfer Rate (TPS)
+- p95 and p99 Latency
+- Active Database Connections
+- Total Accounts & Transfers counters
+
+## API Endpoints
+
+Base URL: `http://localhost:8080/api/v1`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/accounts` | Create account |
+| GET | `/accounts/:id` | Get account |
+| GET | `/accounts` | List accounts |
+| POST | `/transfers` | Create transfer |
+| POST | `/transfers/batch` | Batch transfer (atomic) |
+| GET | `/transfers/:id` | Get transfer |
+| GET | `/accounts/:id/entries` | List entries |
+| GET | `/accounts/:id/balance/history` | Historical balance |
+| POST | `/holds` | Create hold |
+| POST | `/holds/:id/capture` | Capture hold |
+| POST | `/holds/:id/void` | Void hold |
+
+## Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATABASE_URL` | `postgres://...` | PostgreSQL Connection URL |
+| `REDIS_URL` | `redis://...` | Redis Connection URL |
+| `HTTP_PORT` | `8080` | HTTP server port |
+| `GRPC_PORT` | `50051` | gRPC server port |
+| `AUTH_ENABLED` | `true` | Enable JWT authentication |
+| `JWT_SECRET` | `secret` | JWT signing key |
+| `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 
 ## Architecture
 
@@ -36,119 +136,31 @@ A production-ready double-entry ledger implementation in Go with PostgreSQL and 
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
-
-```bash
-# Start services
-docker-compose up -d
-
-# Run the server
-go run ./cmd/server
-
-# Or build and run
-make build
-./bin/goledger
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/accounts` | Create account |
-| GET | `/api/v1/accounts/:id` | Get account |
-| GET | `/api/v1/accounts` | List accounts |
-| POST | `/api/v1/transfers` | Create transfer |
-| POST | `/api/v1/transfers/batch` | Batch transfer (atomic) |
-| GET | `/api/v1/transfers/:id` | Get transfer |
-| GET | `/api/v1/accounts/:id/entries` | List entries |
-| GET | `/api/v1/accounts/:id/balance/history` | Historical balance |
-| GET | `/health` | Liveness probe |
-| GET | `/ready` | Readiness probe |
-| GET | `/metrics` | Prometheus metrics |
-
-## Configuration
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `DATABASE_URL` | `postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable` | PostgreSQL URL |
-| `DATABASE_MAX_CONNS` | `25` | Max pool connections |
-| `DATABASE_MIN_CONNS` | `5` | Min pool connections |
-| `REDIS_URL` | `redis://localhost:6379` | Redis URL |
-| `HTTP_PORT` | `8080` | HTTP server port |
-| `HTTP_READ_TIMEOUT` | `30s` | Request read timeout |
-| `HTTP_WRITE_TIMEOUT` | `30s` | Response write timeout |
-| `HTTP_IDLE_TIMEOUT` | `60s` | Keep-alive timeout |
-| `HTTP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout |
-| `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `IDEMPOTENCY_TTL` | `24h` | Idempotency key TTL |
-
-## Example Usage
-
-```bash
-# Create accounts
-curl -X POST http://localhost:8080/api/v1/accounts \
-  -H "Content-Type: application/json" \
-  -d '{"name": "alice", "currency": "USD", "allow_negative_balance": false, "allow_positive_balance": true}'
-
-curl -X POST http://localhost:8080/api/v1/accounts \
-  -H "Content-Type: application/json" \
-  -d '{"name": "bob", "currency": "USD", "allow_negative_balance": false, "allow_positive_balance": true}'
-
-# Create transfer (with idempotency key)
-curl -X POST http://localhost:8080/api/v1/transfers \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: unique-key-123" \
-  -d '{"from_account_id": "ALICE_ID", "to_account_id": "BOB_ID", "amount": "100.50"}'
-
-# Batch transfer (atomic)
-curl -X POST http://localhost:8080/api/v1/transfers/batch \
-  -H "Content-Type: application/json" \
-  -d '{"transfers": [
-    {"from_account_id": "A", "to_account_id": "B", "amount": "50"},
-    {"from_account_id": "B", "to_account_id": "C", "amount": "25"}
-  ]}'
-```
-
 ## Development
 
 ```bash
 make deps           # Download dependencies
 make generate       # Generate sqlc + mocks
 make build          # Build binary
-make test           # Run unit tests (gotestsum)
-make test-all       # Run all tests with race detector
+make test           # Run unit tests
+make test-all       # Run all tests (unit + integration)
 make test-coverage  # Generate coverage report
 make lint           # Run golangci-lint
-make docker-up      # Start Postgres + Redis
-make docker-down    # Stop services
-```
-
-## Testing
-
-```bash
-# Unit tests
-make test
-
-# Integration tests (requires Docker)
-make test-integration
-
-# All tests with coverage
-make test-coverage
 ```
 
 ## Tech Stack
 
-- **Go 1.23+** - Language
+- **Go 1.24** - Language
 - **PostgreSQL 16** - Primary database
 - **Redis 7** - Idempotency store
 - **chi** - HTTP router
 - **sqlc** - Type-safe SQL
 - **pgx/v5** - PostgreSQL driver
-- **zerolog** - Structured logging
+- **slog** - Structured logging (stdlib)
 - **gomock** - Mock generation
 - **golangci-lint** - Linting
 - **gotestsum** - Test runner
 
 ## License
 
-MIT
+GNU General Public License v3
