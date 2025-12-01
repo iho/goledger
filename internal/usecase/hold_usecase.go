@@ -312,3 +312,15 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 
 	return transfer, nil
 }
+
+// ListHoldsByAccountInput represents input for listing holds by account
+type ListHoldsByAccountInput struct {
+	AccountID string
+	Limit     int
+	Offset    int
+}
+
+// ListHoldsByAccount retrieves holds for a given account
+func (uc *HoldUseCase) ListHoldsByAccount(ctx context.Context, input ListHoldsByAccountInput) ([]*domain.Hold, error) {
+	return uc.holdRepo.ListByAccount(ctx, input.AccountID, input.Limit, input.Offset)
+}

@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package goledger.v1;
+
+option go_package = "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1;goledgerv1";
+
+import "goledger/v1/types.proto";
+import "google/protobuf/timestamp.proto";
+
+// TransferService manages money transfers
+service TransferService {
+  // CreateTransfer creates a single transfer
+  rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
+  
+  // CreateBatchTransfer creates multiple transfers atomically
+  rpc CreateBatchTransfer(CreateBatchTransferRequest) returns (CreateBatchTransferResponse);
+  
+  // GetTransfer retrieves a transfer by ID
+  rpc GetTransfer(GetTransferRequest) returns (GetTransferResponse);
+  
+  // ListTransfersByAccount lists transfers for an account
+  rpc ListTransfersByAccount(ListTransfersByAccountRequest) returns (ListTransfersByAccountResponse);
+  
+  // ReverseTransfer creates a reversal transfer
+  rpc ReverseTransfer(ReverseTransferRequest) returns (ReverseTransferResponse);
+}
+
+message CreateTransferRequest {
+  string from_account_id = 1;
+  string to_account_id = 2;
+  string amount = 3; // decimal as string
+  optional google.protobuf.Timestamp event_at = 4;
+  map<string, string> metadata = 5;
+  optional string idempotency_key = 6;
+}
+
+message CreateTransferResponse {
+  Transfer transfer = 1;
+}
+
+message CreateBatchTransferRequest {
+  repeated CreateTransferRequest transfers = 1;
+  optional google.protobuf.Timestamp event_at = 2;
+  map<string, string> metadata = 3;
+}
+
+message CreateBatchTransferResponse {
+  repeated Transfer transfers = 1;
+}
+
+message GetTransferRequest {
+  string id = 1;
+}
+
+message GetTransferResponse {
+  Transfer transfer = 1;
+}
+
+message ListTransfersByAccountRequest {
+  string account_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListTransfersByAccountResponse {
+  repeated Transfer transfers = 1;
+}
+
+message ReverseTransferRequest {
+  string transfer_id = 1;
+  map<string, string> metadata = 2;
+}
+
+message ReverseTransferResponse {
+  Transfer transfer = 1;
+}

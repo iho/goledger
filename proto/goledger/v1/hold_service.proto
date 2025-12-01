@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package goledger.v1;
+
+option go_package = "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1;goledgerv1";
+
+import "goledger/v1/types.proto";
+
+// HoldService manages fund holds/reservations
+service HoldService {
+  // HoldFunds places a hold on an account
+  rpc HoldFunds(HoldFundsRequest) returns (HoldFundsResponse);
+  
+  // VoidHold cancels a hold
+  rpc VoidHold(VoidHoldRequest) returns (VoidHoldResponse);
+  
+  // CaptureHold captures a hold as a transfer
+  rpc CaptureHold(CaptureHoldRequest) returns (CaptureHoldResponse);
+  
+  // ListHoldsByAccount lists holds for an account
+  rpc ListHoldsByAccount(ListHoldsByAccountRequest) returns (ListHoldsByAccountResponse);
+}
+
+message HoldFundsRequest {
+  string account_id = 1;
+  string amount = 2; // decimal as string
+}
+
+message HoldFundsResponse {
+  Hold hold = 1;
+}
+
+message VoidHoldRequest {
+  string hold_id = 1;
+}
+
+message VoidHoldResponse {
+  // Empty response, success indicated by no error
+}
+
+message CaptureHoldRequest {
+  string hold_id = 1;
+  string to_account_id = 2;
+}
+
+message CaptureHoldResponse {
+  Transfer transfer = 1;
+}
+
+message ListHoldsByAccountRequest {
+  string account_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListHoldsByAccountResponse {
+  repeated Hold holds = 1;
+}

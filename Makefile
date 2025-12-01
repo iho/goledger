@@ -15,8 +15,12 @@ sqlc:
 mocks:
 	mockgen -source=internal/usecase/interfaces.go -destination=internal/usecase/mocks/mock_interfaces.go -package=mocks
 
-# Generate all code (sqlc + mocks)
-generate: sqlc mocks
+# Generate protobuf code using buf
+buf:
+	buf generate
+
+# Generate all code (sqlc + mocks + protobuf)
+generate: sqlc mocks buf
 
 # Download dependencies
 deps:

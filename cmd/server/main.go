@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,6 +11,8 @@ import (
 
 	"log/slog"
 
+	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
+	grpcServer "github.com/iho/goledger/internal/adapter/grpc/server"
 	httpAdapter "github.com/iho/goledger/internal/adapter/http"
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	postgresRepo "github.com/iho/goledger/internal/adapter/repository/postgres"
@@ -20,6 +23,8 @@ import (
 	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/redis"
 	"github.com/iho/goledger/internal/usecase"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -121,8 +126,8 @@ func main() {
 		}
 	}()
 
-	// Create server with timeouts
-	server := &http.Server{
+	// Create HTTP server with timeouts
+	httpServer := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,
 		Handler:      router,
 		ReadTimeout:  cfg.HTTPReadTimeout,
@@ -130,13 +135,44 @@ func main() {
 		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
 
-	// Start server in goroutine
+	// Create gRPC server
+	grpcSrv := grpc.NewServer()
+
+	// Register gRPC services
+	pb.RegisterAccountServiceServer(grpcSrv, grpcServer.NewAccountServer(accountUC))
+	pb.RegisterTransferServiceServer(grpcSrv, grpcServer.NewTransferServer(transferUC))
+	pb.RegisterHoldServiceServer(grpcSrv, grpcServer.NewHoldServer(holdUC))
+
+	// Register reflection service for grpcurl
+	reflection.Register(grpcSrv)
+
+	// Start HTTP server in goroutine
 	go func() {
-		l.Info("starting server", "port", cfg.HTTPPort)
-		err := server.ListenAndServe()
+		l.Info("starting HTTP server", "port", cfg.HTTPPort)
+		err := httpServer.ListenAndServe()
 
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			l.Error("server failed", "error", err)
+			l.Error("HTTP server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Start gRPC server in goroutine
+	grpcPort := "50051" // Default gRPC port
+	if os.Getenv("GRPC_PORT") != "" {
+		grpcPort = os.Getenv("GRPC_PORT")
+	}
+
+	go func() {
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			l.Error("failed to listen for gRPC", "error", err)
+			os.Exit(1)
+		}
+
+		l.Info("starting gRPC server", "port", grpcPort)
+		if err := grpcSrv.Serve(lis); err != nil {
+			l.Error("gRPC server failed", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -156,11 +192,15 @@ func main() {
 	cancelPublisher()
 	l.Info("event publisher stopped")
 
+	// Shutdown gRPC server
+	grpcSrv.GracefulStop()
+	l.Info("gRPC server stopped")
+
 	// Shutdown HTTP server
-	if err := server.Shutdown(ctx); err != nil {
-		l.Error("server forced to shutdown", "error", err)
+	if err := httpServer.Shutdown(ctx); err != nil {
+		l.Error("HTTP server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
 
-	l.Info("server stopped")
+	l.Info("servers stopped")
 }

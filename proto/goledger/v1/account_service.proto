@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package goledger.v1;
+
+option go_package = "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1;goledgerv1";
+
+import "goledger/v1/types.proto";
+
+// AccountService manages ledger accounts
+service AccountService {
+  // CreateAccount creates a new ledger account
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  
+  // GetAccount retrieves an account by ID
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  
+  // ListAccounts lists accounts with pagination
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+}
+
+message CreateAccountRequest {
+  string name = 1;
+  string currency = 2;
+  bool allow_negative_balance = 3;
+  bool allow_positive_balance = 4;
+}
+
+message CreateAccountResponse {
+  Account account = 1;
+}
+
+message GetAccountRequest {
+  string id = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+message ListAccountsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
