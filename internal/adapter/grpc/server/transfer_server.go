@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/iho/goledger/internal/adapter/grpc/converter"
+	grpcErrors "github.com/iho/goledger/internal/adapter/grpc/errors"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
 	"github.com/iho/goledger/internal/usecase"
 )
@@ -28,7 +29,7 @@ func NewTransferServer(transferUC *usecase.TransferUseCase) *TransferServer {
 func (s *TransferServer) CreateTransfer(ctx context.Context, req *pb.CreateTransferRequest) (*pb.CreateTransferResponse, error) {
 	amount, err := converter.ParseDecimal(req.Amount)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid amount: "+err.Error())
+		return nil, status.Error(codes.InvalidArgument, "invalid amount format")
 	}
 
 	input := usecase.CreateTransferInput{
@@ -41,7 +42,7 @@ func (s *TransferServer) CreateTransfer(ctx context.Context, req *pb.CreateTrans
 
 	transfer, err := s.transferUC.CreateTransfer(ctx, input)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	return &pb.CreateTransferResponse{
@@ -55,7 +56,7 @@ func (s *TransferServer) CreateBatchTransfer(ctx context.Context, req *pb.Create
 	for i, t := range req.Transfers {
 		amount, err := converter.ParseDecimal(t.Amount)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid amount at index %d: %v", i, err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid amount format at index %d", i)
 		}
 
 		transfers[i] = usecase.CreateTransferInput{
@@ -75,7 +76,7 @@ func (s *TransferServer) CreateBatchTransfer(ctx context.Context, req *pb.Create
 
 	results, err := s.transferUC.CreateBatchTransfer(ctx, batchInput)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	pbTransfers := make([]*pb.Transfer, len(results))
@@ -92,7 +93,7 @@ func (s *TransferServer) CreateBatchTransfer(ctx context.Context, req *pb.Create
 func (s *TransferServer) GetTransfer(ctx context.Context, req *pb.GetTransferRequest) (*pb.GetTransferResponse, error) {
 	transfer, err := s.transferUC.GetTransfer(ctx, req.Id)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	return &pb.GetTransferResponse{
@@ -108,7 +109,7 @@ func (s *TransferServer) ListTransfersByAccount(ctx context.Context, req *pb.Lis
 		Offset:    int(req.Offset),
 	})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	pbTransfers := make([]*pb.Transfer, len(transfers))
@@ -128,7 +129,7 @@ func (s *TransferServer) ReverseTransfer(ctx context.Context, req *pb.ReverseTra
 		Metadata:   converter.MetadataToMap(req.Metadata),
 	})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	return &pb.ReverseTransferResponse{

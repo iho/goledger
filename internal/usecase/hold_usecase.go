@@ -44,14 +44,18 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		return nil, domain.ErrInvalidAmount
 	}
 
-	tx, err := uc.txManager.Begin(ctx)
+	// Add transaction timeout
+	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+	defer cancel()
+
+	tx, err := uc.txManager.Begin(txCtx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(txCtx)
 
 	// Lock account
-	account, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, accountID)
+	account, err := uc.accountRepo.GetByIDForUpdate(txCtx, tx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +75,12 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		UpdatedAt: now,
 	}
 
-	if err := uc.holdRepo.Create(ctx, tx, hold); err != nil {
+	if err := uc.holdRepo.Create(txCtx, tx, hold); err != nil {
 		return nil, err
 	}
 
 	newEncumbered := account.EncumberedBalance.Add(amount)
-	if err := uc.accountRepo.UpdateEncumberedBalance(ctx, tx, accountID, newEncumbered, now); err != nil {
+	if err := uc.accountRepo.UpdateEncumberedBalance(txCtx, tx, accountID, newEncumbered, now); err != nil {
 		return nil, err
 	}
 
@@ -95,11 +99,11 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		CreatedAt: now,
 		Published: false,
 	}
-	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
+	if err := uc.outboxRepo.Create(txCtx, tx, event); err != nil {
 		return nil, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(txCtx); err != nil {
 		return nil, err
 	}
 
@@ -107,13 +111,17 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 }
 
 func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
-	tx, err := uc.txManager.Begin(ctx)
+	// Add transaction timeout
+	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+	defer cancel()
+
+	tx, err := uc.txManager.Begin(txCtx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(txCtx)
 
-	hold, err := uc.holdRepo.GetByIDForUpdate(ctx, tx, holdID)
+	hold, err := uc.holdRepo.GetByIDForUpdate(txCtx, tx, holdID)
 	if err != nil {
 		return err
 	}
@@ -122,13 +130,13 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 		return domain.ErrHoldNotActive
 	}
 
-	account, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, hold.AccountID)
+	account, err := uc.accountRepo.GetByIDForUpdate(txCtx, tx, hold.AccountID)
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC()
-	if err := uc.holdRepo.UpdateStatus(ctx, tx, holdID, domain.HoldStatusVoided, now); err != nil {
+	if err := uc.holdRepo.UpdateStatus(txCtx, tx, holdID, domain.HoldStatusVoided, now); err != nil {
 		return err
 	}
 
@@ -138,7 +146,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 		newEncumbered = decimal.Zero
 	}
 
-	if err := uc.accountRepo.UpdateEncumberedBalance(ctx, tx, hold.AccountID, newEncumbered, now); err != nil {
+	if err := uc.accountRepo.UpdateEncumberedBalance(txCtx, tx, hold.AccountID, newEncumbered, now); err != nil {
 		return err
 	}
 
@@ -156,21 +164,25 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 		CreatedAt: now,
 		Published: false,
 	}
-	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
+	if err := uc.outboxRepo.Create(txCtx, tx, event); err != nil {
 		return err
 	}
 
-	return tx.Commit(ctx)
+	return tx.Commit(txCtx)
 }
 
 func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccountID string) (*domain.Transfer, error) {
-	tx, err := uc.txManager.Begin(ctx)
+	// Add transaction timeout
+	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+	defer cancel()
+
+	tx, err := uc.txManager.Begin(txCtx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(txCtx)
 
-	hold, err := uc.holdRepo.GetByIDForUpdate(ctx, tx, holdID)
+	hold, err := uc.holdRepo.GetByIDForUpdate(txCtx, tx, holdID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +200,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 	// But `GetByIDsForUpdate` already sorts them in the repo implementation (if we use the one from `AccountRepository`).
 	// Yes, `GetByIDsForUpdate` uses `ORDER BY id`.
 
-	accounts, err := uc.accountRepo.GetByIDsForUpdate(ctx, tx, ids)
+	accounts, err := uc.accountRepo.GetByIDsForUpdate(txCtx, tx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +239,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 		Metadata:      map[string]any{"hold_id": hold.ID, "type": "capture"},
 	}
 
-	if err := uc.transferRepo.Create(ctx, tx, transfer); err != nil {
+	if err := uc.transferRepo.Create(txCtx, tx, transfer); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +257,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 		AccountVersion:         fromAccount.Version + 1,
 		CreatedAt:              now,
 	}
-	if err := uc.entryRepo.Create(ctx, tx, fromEntry); err != nil {
+	if err := uc.entryRepo.Create(txCtx, tx, fromEntry); err != nil {
 		return nil, err
 	}
 
@@ -254,10 +266,10 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 	// Update balance AND encumbered balance.
 	// We need to call UpdateBalance and UpdateEncumberedBalance.
 	// Or strictly: we should probably add `UpdateAccountState` to repo to do both, but doing two updates in same TX is fine.
-	if err := uc.accountRepo.UpdateBalance(ctx, tx, fromAccount.ID, fromNewBalance, now); err != nil {
+	if err := uc.accountRepo.UpdateBalance(txCtx, tx, fromAccount.ID, fromNewBalance, now); err != nil {
 		return nil, err
 	}
-	if err := uc.accountRepo.UpdateEncumberedBalance(ctx, tx, fromAccount.ID, fromNewEncumbered, now); err != nil {
+	if err := uc.accountRepo.UpdateEncumberedBalance(txCtx, tx, fromAccount.ID, fromNewEncumbered, now); err != nil {
 		return nil, err
 	}
 
@@ -273,17 +285,17 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 		AccountVersion:         toAccount.Version + 1,
 		CreatedAt:              now,
 	}
-	if err := uc.entryRepo.Create(ctx, tx, toEntry); err != nil {
+	if err := uc.entryRepo.Create(txCtx, tx, toEntry); err != nil {
 		return nil, err
 	}
 
 	// Update To Account
-	if err := uc.accountRepo.UpdateBalance(ctx, tx, toAccount.ID, toNewBalance, now); err != nil {
+	if err := uc.accountRepo.UpdateBalance(txCtx, tx, toAccount.ID, toNewBalance, now); err != nil {
 		return nil, err
 	}
 
 	// Update Hold Status
-	if err := uc.holdRepo.UpdateStatus(ctx, tx, hold.ID, domain.HoldStatusCaptured, now); err != nil {
+	if err := uc.holdRepo.UpdateStatus(txCtx, tx, hold.ID, domain.HoldStatusCaptured, now); err != nil {
 		return nil, err
 	}
 
@@ -302,11 +314,11 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID string, toAccount
 		CreatedAt: now,
 		Published: false,
 	}
-	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
+	if err := uc.outboxRepo.Create(txCtx, tx, event); err != nil {
 		return nil, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(txCtx); err != nil {
 		return nil, err
 	}
 

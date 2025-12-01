@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -38,13 +39,22 @@ func (r *HoldRepository) Create(ctx context.Context, tx usecase.Transaction, hol
 		expiresAt = timeToPgTimestamptz(*hold.ExpiresAt)
 	}
 
+	var metadata []byte
+	if hold.Metadata != nil {
+		var err error
+		metadata, err = json.Marshal(hold.Metadata)
+		if err != nil {
+			return err
+		}
+	}
+
 	_, err := queries.CreateHold(ctx, generated.CreateHoldParams{
 		ID:        hold.ID,
 		AccountID: hold.AccountID,
 		Amount:    decimalToNumeric(hold.Amount),
 		Status:    string(hold.Status),
 		ExpiresAt: expiresAt,
-		Metadata:  nil, // TODO: map metadata to JSONB
+		Metadata:  metadata,
 		CreatedAt: timeToPgTimestamptz(hold.CreatedAt),
 		UpdatedAt: timeToPgTimestamptz(hold.UpdatedAt),
 	})
@@ -119,12 +129,18 @@ func rowToHold(row generated.Hold) *domain.Hold {
 		expiresAt = &t
 	}
 
+	var metadata map[string]any
+	if row.Metadata != nil {
+		_ = json.Unmarshal(row.Metadata, &metadata)
+	}
+
 	return &domain.Hold{
 		ID:        row.ID,
 		AccountID: row.AccountID,
 		Amount:    numericToDecimal(row.Amount),
 		Status:    domain.HoldStatus(row.Status),
 		ExpiresAt: expiresAt,
+		Metadata:  metadata,
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
 	}

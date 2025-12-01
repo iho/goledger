@@ -123,15 +123,19 @@ func (uc *TransferUseCase) executeTransferTransaction(
 	input CreateBatchTransferInput,
 	accountIDs []string,
 ) ([]*domain.Transfer, error) {
+	// Add transaction timeout to prevent long-running transactions
+	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+	defer cancel()
+
 	// Begin transaction
-	tx, err := uc.txManager.Begin(ctx)
+	tx, err := uc.txManager.Begin(txCtx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(txCtx)
 
 	// 3. Lock accounts in sorted order
-	accounts, err := uc.accountRepo.GetByIDsForUpdate(ctx, tx, accountIDs)
+	accounts, err := uc.accountRepo.GetByIDsForUpdate(txCtx, tx, accountIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +161,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 			metadata = ti.Metadata
 		}
 
-		transfer, err := uc.processTransfer(ctx, tx, accountMap, ti, now, eventAt, metadata)
+		transfer, err := uc.processTransfer(txCtx, tx, accountMap, ti, now, eventAt, metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +170,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 	}
 
 	// 5. Commit transaction
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.Commit(txCtx); err != nil {
 		return nil, err
 	}
 
@@ -387,18 +391,22 @@ func (uc *TransferUseCase) ReverseTransfer(ctx context.Context, input ReverseTra
 
 	var reversalTransfer *domain.Transfer
 	err = uc.retrier.Retry(ctx, func() error {
-		tx, txErr := uc.txManager.Begin(ctx)
+		// Add transaction timeout
+		txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+		defer cancel()
+
+		tx, txErr := uc.txManager.Begin(txCtx)
 		if txErr != nil {
 			return txErr
 		}
-		defer tx.Rollback(ctx)
+		defer tx.Rollback(txCtx)
 
-		reversalTransfer, txErr = uc.executeReverseTransfer(ctx, tx, reversalInput, originalTransfer.ID)
+		reversalTransfer, txErr = uc.executeReverseTransfer(txCtx, tx, reversalInput, originalTransfer.ID)
 		if txErr != nil {
 			return txErr
 		}
 
-		return tx.Commit(ctx)
+		return tx.Commit(txCtx)
 	})
 
 	return reversalTransfer, err

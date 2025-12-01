@@ -11,6 +11,10 @@ import (
 
 	"log/slog"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	grpcMiddleware "github.com/iho/goledger/internal/adapter/grpc/middleware"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
 	grpcServer "github.com/iho/goledger/internal/adapter/grpc/server"
 	httpAdapter "github.com/iho/goledger/internal/adapter/http"
@@ -23,8 +27,6 @@ import (
 	"github.com/iho/goledger/internal/infrastructure/postgres"
 	"github.com/iho/goledger/internal/infrastructure/redis"
 	"github.com/iho/goledger/internal/usecase"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -135,8 +137,10 @@ func main() {
 		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
 
-	// Create gRPC server
-	grpcSrv := grpc.NewServer()
+	// Create gRPC server with idempotency interceptor
+	grpcSrv := grpc.NewServer(
+		grpc.UnaryInterceptor(grpcMiddleware.IdempotencyInterceptor(idempotencyStore)),
+	)
 
 	// Register gRPC services
 	pb.RegisterAccountServiceServer(grpcSrv, grpcServer.NewAccountServer(accountUC))

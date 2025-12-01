@@ -3,10 +3,8 @@ package server
 import (
 	"context"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/iho/goledger/internal/adapter/grpc/converter"
+	grpcErrors "github.com/iho/goledger/internal/adapter/grpc/errors"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
 	"github.com/iho/goledger/internal/usecase"
 )
@@ -33,7 +31,7 @@ func (s *AccountServer) CreateAccount(ctx context.Context, req *pb.CreateAccount
 		AllowPositiveBalance: req.AllowPositiveBalance,
 	})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	return &pb.CreateAccountResponse{
@@ -45,7 +43,7 @@ func (s *AccountServer) CreateAccount(ctx context.Context, req *pb.CreateAccount
 func (s *AccountServer) GetAccount(ctx context.Context, req *pb.GetAccountRequest) (*pb.GetAccountResponse, error) {
 	account, err := s.accountUC.GetAccount(ctx, req.Id)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	return &pb.GetAccountResponse{
@@ -60,7 +58,7 @@ func (s *AccountServer) ListAccounts(ctx context.Context, req *pb.ListAccountsRe
 		Offset: int(req.Offset),
 	})
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, grpcErrors.MapDomainError(err)
 	}
 
 	pbAccounts := make([]*pb.Account, len(accounts))
