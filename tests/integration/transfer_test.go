@@ -40,9 +40,9 @@ func TestTransfer(t *testing.T) {
 	txManager := postgres.NewTxManager(pool)
 	idGen := postgres.NewULIDGenerator()
 
-	accountUC := usecase.NewAccountUseCase(accountRepo, idGen, nil)
+	accountUC := usecase.NewAccountUseCase(txManager, accountRepo, nil, idGen, nil)
 	outboxRepo := postgres.NewNullOutboxRepository()
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 
 	redisURL := os.Getenv("REDIS_URL")

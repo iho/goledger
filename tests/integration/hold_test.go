@@ -30,7 +30,7 @@ func TestHoldLifecycle(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 
 	outboxRepo := postgres.NewNullOutboxRepository()
-	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil)
 
 	t.Run("full hold lifecycle: create -> void", func(t *testing.T) {
 		testDB.TruncateAll(ctx)

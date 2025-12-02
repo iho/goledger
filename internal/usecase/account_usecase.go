@@ -12,15 +12,25 @@ import (
 
 // AccountUseCase handles account business logic.
 type AccountUseCase struct {
+	txManager   TransactionManager
 	accountRepo AccountRepository
+	auditRepo   AuditRepository
 	idGen       IDGenerator
 	metrics     *metrics.Metrics
 }
 
 // NewAccountUseCase creates a new AccountUseCase.
-func NewAccountUseCase(accountRepo AccountRepository, idGen IDGenerator, metrics *metrics.Metrics) *AccountUseCase {
+func NewAccountUseCase(
+	txManager TransactionManager,
+	accountRepo AccountRepository,
+	auditRepo AuditRepository,
+	idGen IDGenerator,
+	metrics *metrics.Metrics,
+) *AccountUseCase {
 	return &AccountUseCase{
+		txManager:   txManager,
 		accountRepo: accountRepo,
+		auditRepo:   auditRepo,
 		idGen:       idGen,
 		metrics:     metrics,
 	}
@@ -36,7 +46,26 @@ type CreateAccountInput struct {
 
 // CreateAccount creates a new account.
 func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccountInput) (*domain.Account, error) {
+	// Validate input
+	if err := domain.ValidateAccountName(input.Name); err != nil {
+		return nil, err
+	}
+	if err := domain.ValidateCurrency(input.Currency); err != nil {
+		return nil, err
+	}
+
 	now := time.Now().UTC()
+
+	// Start transaction
+	// Add transaction timeout
+	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
+	defer cancel()
+
+	tx, err := uc.txManager.Begin(txCtx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(txCtx) }()
 
 	account := &domain.Account{
 		ID:                   uc.idGen.Generate(),
@@ -50,8 +79,34 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 		UpdatedAt:            now,
 	}
 
-	err := uc.accountRepo.Create(ctx, account)
-	if err != nil {
+	// Create account with transaction
+	if err := uc.accountRepo.CreateTx(txCtx, tx, account); err != nil {
+		return nil, err
+	}
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(domain.AuditActionAccountCreate),
+			ResourceType: "account",
+			ResourceID:   account.ID,
+			AfterState:   domain.MarshalState(account),
+			Status:       string(domain.AuditStatusSuccess),
+			CreatedAt:    time.Now(),
+		}
+		if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(txCtx); err != nil {
 		return nil, err
 	}
 

@@ -18,11 +18,16 @@ func TestAccountUseCase_CreateAccount(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
+	tx := mocks.NewMockTransaction(ctrl)
 
 	idGen.EXPECT().Generate().Return("test-id-123")
-	repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+	txManager.EXPECT().Begin(gomock.Any()).Return(tx, nil)
+	tx.EXPECT().Rollback(gomock.Any()).AnyTimes()
+	tx.EXPECT().Commit(gomock.Any()).Return(nil)
+	repo.EXPECT().CreateTx(gomock.Any(), tx, gomock.Any()).Return(nil)
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 
 	account, err := uc.CreateAccount(context.Background(), usecase.CreateAccountInput{
 		Name:                 "test-account",
@@ -49,13 +54,14 @@ func TestAccountUseCase_GetAccount(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
 
 	repo.EXPECT().GetByID(gomock.Any(), "test-id").Return(&domain.Account{
 		ID:   "test-id",
 		Name: "test",
 	}, nil)
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 
 	account, err := uc.GetAccount(context.Background(), "test-id")
 	if err != nil {
@@ -77,10 +83,11 @@ func TestAccountUseCase_GetAccount_NotFound(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
 
 	repo.EXPECT().GetByID(gomock.Any(), "non-existent").Return(nil, domain.ErrAccountNotFound)
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 	_, err := uc.GetAccount(context.Background(), "non-existent")
 
 	if !errors.Is(err, domain.ErrAccountNotFound) {
@@ -94,13 +101,14 @@ func TestAccountUseCase_ListAccounts(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
 
 	repo.EXPECT().List(gomock.Any(), 10, 0).Return([]*domain.Account{
 		{ID: "1", Name: "acc1"},
 		{ID: "2", Name: "acc2"},
 	}, nil)
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 
 	accounts, err := uc.ListAccounts(context.Background(), usecase.ListAccountsInput{Limit: 10, Offset: 0})
 	if err != nil {
@@ -118,11 +126,15 @@ func TestAccountUseCase_CreateAccount_Error(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
+	tx := mocks.NewMockTransaction(ctrl)
 
 	idGen.EXPECT().Generate().Return("test-id-123")
-	repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
+	txManager.EXPECT().Begin(gomock.Any()).Return(tx, nil)
+	tx.EXPECT().Rollback(gomock.Any()).AnyTimes()
+	repo.EXPECT().CreateTx(gomock.Any(), tx, gomock.Any()).Return(errors.New("db error"))
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 
 	_, err := uc.CreateAccount(context.Background(), usecase.CreateAccountInput{
 		Name:     "test",
@@ -140,10 +152,11 @@ func TestAccountUseCase_ListAccounts_Error(t *testing.T) {
 
 	repo := mocks.NewMockAccountRepository(ctrl)
 	idGen := mocks.NewMockIDGenerator(ctrl)
+	txManager := mocks.NewMockTransactionManager(ctrl)
 
 	repo.EXPECT().List(gomock.Any(), 10, 0).Return(nil, errors.New("db error"))
 
-	uc := usecase.NewAccountUseCase(repo, idGen, nil)
+	uc := usecase.NewAccountUseCase(txManager, repo, nil, idGen, nil)
 
 	_, err := uc.ListAccounts(context.Background(), usecase.ListAccountsInput{Limit: 10, Offset: 0})
 

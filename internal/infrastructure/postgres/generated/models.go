@@ -21,6 +21,22 @@ type Account struct {
 	EncumberedBalance    pgtype.Numeric     `json:"encumbered_balance"`
 }
 
+type AuditLog struct {
+	ID           string             `json:"id"`
+	UserID       string             `json:"user_id"`
+	Action       string             `json:"action"`
+	ResourceType string             `json:"resource_type"`
+	ResourceID   string             `json:"resource_id"`
+	IpAddress    *string            `json:"ip_address"`
+	UserAgent    *string            `json:"user_agent"`
+	RequestID    *string            `json:"request_id"`
+	BeforeState  []byte             `json:"before_state"`
+	AfterState   []byte             `json:"after_state"`
+	Status       string             `json:"status"`
+	ErrorMessage *string            `json:"error_message"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Entry struct {
 	ID                     string             `json:"id"`
 	AccountID              string             `json:"account_id"`
@@ -63,4 +79,15 @@ type Transfer struct {
 	EventAt            pgtype.Timestamptz `json:"event_at"`
 	Metadata           []byte             `json:"metadata"`
 	ReversedTransferID *string            `json:"reversed_transfer_id"`
+}
+
+type User struct {
+	ID             string             `json:"id"`
+	Email          string             `json:"email"`
+	Name           string             `json:"name"`
+	HashedPassword string             `json:"hashed_password"`
+	Role           string             `json:"role"`
+	Active         bool               `json:"active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }

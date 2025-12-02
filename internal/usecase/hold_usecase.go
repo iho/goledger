@@ -17,6 +17,7 @@ type HoldUseCase struct {
 	transferRepo TransferRepository
 	entryRepo    EntryRepository
 	outboxRepo   OutboxRepository
+	auditRepo    AuditRepository
 	idGen        IDGenerator
 	metrics      *metrics.Metrics
 }
@@ -28,6 +29,7 @@ func NewHoldUseCase(
 	transferRepo TransferRepository,
 	entryRepo EntryRepository,
 	outboxRepo OutboxRepository,
+	auditRepo AuditRepository,
 	idGen IDGenerator,
 	metrics *metrics.Metrics,
 ) *HoldUseCase {
@@ -38,6 +40,7 @@ func NewHoldUseCase(
 		transferRepo: transferRepo,
 		entryRepo:    entryRepo,
 		outboxRepo:   outboxRepo,
+		auditRepo:    auditRepo,
 		idGen:        idGen,
 		metrics:      metrics,
 	}
@@ -105,6 +108,28 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 	}
 	if err := uc.outboxRepo.Create(txCtx, tx, event); err != nil {
 		return nil, err
+	}
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(domain.AuditActionHoldCreate),
+			ResourceType: "hold",
+			ResourceID:   hold.ID,
+			AfterState:   domain.MarshalState(hold),
+			Status:       string(domain.AuditStatusSuccess),
+			CreatedAt:    time.Now(),
+		}
+		if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(txCtx); err != nil {
@@ -185,6 +210,25 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	if uc.metrics != nil {
 		uc.metrics.HoldsVoided.Inc()
 		uc.metrics.HoldDuration.Observe(time.Since(start).Seconds())
+	}
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(domain.AuditActionHoldVoid),
+			ResourceType: "hold",
+			ResourceID:   holdID,
+			Status:       string(domain.AuditStatusSuccess),
+			CreatedAt:    time.Now(),
+		}
+		_ = uc.auditRepo.Create(ctx, auditLog)
 	}
 
 	return nil
@@ -345,6 +389,26 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 	if uc.metrics != nil {
 		uc.metrics.HoldsCaptured.Inc()
 		uc.metrics.HoldDuration.Observe(time.Since(start).Seconds())
+	}
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(domain.AuditActionHoldCapture),
+			ResourceType: "hold",
+			ResourceID:   holdID,
+			AfterState:   domain.MarshalState(transfer),
+			Status:       string(domain.AuditStatusSuccess),
+			CreatedAt:    time.Now(),
+		}
+		_ = uc.auditRepo.Create(ctx, auditLog)
 	}
 
 	return transfer, nil

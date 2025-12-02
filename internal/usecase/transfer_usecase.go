@@ -23,6 +23,7 @@ type TransferUseCase struct {
 	transferRepo TransferRepository
 	entryRepo    EntryRepository
 	outboxRepo   OutboxRepository
+	auditRepo    AuditRepository
 	idGen        IDGenerator
 	retrier      Retrier
 	metrics      *metrics.Metrics
@@ -35,6 +36,7 @@ func NewTransferUseCase(
 	transferRepo TransferRepository,
 	entryRepo EntryRepository,
 	outboxRepo OutboxRepository,
+	auditRepo AuditRepository,
 	idGen IDGenerator,
 	metrics *metrics.Metrics,
 ) *TransferUseCase {
@@ -44,6 +46,7 @@ func NewTransferUseCase(
 		transferRepo: transferRepo,
 		entryRepo:    entryRepo,
 		outboxRepo:   outboxRepo,
+		auditRepo:    auditRepo,
 		idGen:        idGen,
 		retrier:      &noopRetrier{},
 		metrics:      metrics,
@@ -98,6 +101,10 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	start := time.Now()
 
 	// 0. Validate inputs before starting transaction
+	if err := domain.ValidateMetadata(input.Metadata); err != nil {
+		return nil, err
+	}
+
 	for _, ti := range input.Transfers {
 		if ti.FromAccountID == ti.ToAccountID {
 			return nil, domain.ErrSameAccount
@@ -105,6 +112,10 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 
 		if ti.Amount.LessThanOrEqual(decimal.Zero) {
 			return nil, domain.ErrInvalidAmount
+		}
+
+		if err := domain.ValidateMetadata(ti.Metadata); err != nil {
+			return nil, err
 		}
 	}
 
@@ -188,6 +199,30 @@ func (uc *TransferUseCase) executeTransferTransaction(
 		}
 
 		transfers = append(transfers, transfer)
+	}
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		for _, t := range transfers {
+			auditLog := &domain.AuditLog{
+				ID:           uc.idGen.Generate(),
+				UserID:       userID,
+				Action:       string(domain.AuditActionTransferCreate),
+				ResourceType: "transfer",
+				ResourceID:   t.ID,
+				AfterState:   domain.MarshalState(t),
+				Status:       string(domain.AuditStatusSuccess),
+				CreatedAt:    time.Now(),
+			}
+			if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// 5. Commit transaction
@@ -557,6 +592,28 @@ func (uc *TransferUseCase) executeReverseTransfer(
 
 	toAccount.Balance = toNewBalance
 	toAccount.Version++
+
+	// Audit logging
+	if uc.auditRepo != nil {
+		userID := "system"
+		if user, ok := domain.UserFromContext(ctx); ok {
+			userID = user.ID
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(domain.AuditActionTransferReverse),
+			ResourceType: "transfer",
+			ResourceID:   reversalTransfer.ID,
+			AfterState:   domain.MarshalState(reversalTransfer),
+			Status:       string(domain.AuditStatusSuccess),
+			CreatedAt:    time.Now(),
+		}
+		if err := uc.auditRepo.CreateTx(ctx, tx, auditLog); err != nil {
+			return nil, err
+		}
+	}
 
 	return reversalTransfer, nil
 }

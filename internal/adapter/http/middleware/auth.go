@@ -9,14 +9,6 @@ import (
 	"github.com/iho/goledger/internal/infrastructure/auth"
 )
 
-// ContextKey is the type for context keys
-type ContextKey string
-
-const (
-	// UserContextKey is the context key for the authenticated user
-	UserContextKey ContextKey = "user"
-)
-
 // AuthMiddleware creates an authentication middleware
 func AuthMiddleware(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -52,7 +44,7 @@ func AuthMiddleware(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 			}
 
 			// Add user to context
-			ctx := context.WithValue(r.Context(), UserContextKey, user)
+			ctx := context.WithValue(r.Context(), domain.UserContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -62,7 +54,7 @@ func AuthMiddleware(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 func RequireRole(minRole domain.Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := r.Context().Value(UserContextKey).(*domain.User)
+			user, ok := r.Context().Value(domain.UserContextKey).(*domain.User)
 			if !ok {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
@@ -109,7 +101,7 @@ func OptionalAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 						Email: claims.Email,
 						Role:  claims.Role,
 					}
-					ctx := context.WithValue(r.Context(), UserContextKey, user)
+					ctx := context.WithValue(r.Context(), domain.UserContextKey, user)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -123,6 +115,5 @@ func OptionalAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 
 // GetUserFromContext extracts the authenticated user from context
 func GetUserFromContext(ctx context.Context) (*domain.User, bool) {
-	user, ok := ctx.Value(UserContextKey).(*domain.User)
-	return user, ok
+	return domain.UserFromContext(ctx)
 }

@@ -12,6 +12,7 @@ import (
 // AccountRepository defines data access for accounts.
 type AccountRepository interface {
 	Create(ctx context.Context, account *domain.Account) error
+	CreateTx(ctx context.Context, tx Transaction, account *domain.Account) error
 	GetByID(ctx context.Context, id string) (*domain.Account, error)
 	GetByIDForUpdate(ctx context.Context, tx Transaction, id string) (*domain.Account, error)
 	GetByIDsForUpdate(ctx context.Context, tx Transaction, ids []string) ([]*domain.Account, error)
@@ -56,6 +57,14 @@ type OutboxRepository interface {
 	MarkPublished(ctx context.Context, id string, publishedAt time.Time) error
 	GetByAggregate(ctx context.Context, aggregateType, aggregateID string, limit, offset int) ([]*domain.OutboxEvent, error)
 	DeletePublished(ctx context.Context, before time.Time) error
+}
+
+// AuditRepository defines data access for audit logs.
+type AuditRepository interface {
+	Create(ctx context.Context, log *domain.AuditLog) error
+	CreateTx(ctx context.Context, tx Transaction, log *domain.AuditLog) error
+	List(ctx context.Context, filter domain.AuditFilter) ([]*domain.AuditLog, error)
+	GetByResourceID(ctx context.Context, resourceType, resourceID string) ([]*domain.AuditLog, error)
 }
 
 // Transaction represents a database transaction.

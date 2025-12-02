@@ -35,7 +35,8 @@ func TestAccountCreation(t *testing.T) {
 	pool := testDB.Pool
 	accountRepo := postgres.NewAccountRepository(pool)
 	idGen := postgres.NewULIDGenerator()
-	accountUC := usecase.NewAccountUseCase(accountRepo, idGen, nil)
+	txManager := postgres.NewTxManager(pool)
+	accountUC := usecase.NewAccountUseCase(txManager, accountRepo, nil, idGen, nil)
 	accountHandler := handler.NewAccountHandler(accountUC)
 
 	// Create router with just account handler
@@ -51,11 +52,10 @@ func TestAccountCreation(t *testing.T) {
 	defer redisClient.Close()
 
 	idempotencyStore := redisrepo.NewIdempotencyStore(redisClient)
-	txManager := postgres.NewTxManager(pool)
 	transferRepo := postgres.NewTransferRepository(pool)
 	entryRepo := postgres.NewEntryRepository(pool)
 	outboxRepo := postgres.NewNullOutboxRepository()
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil)
 	entryUC := usecase.NewEntryUseCase(postgres.NewEntryRepository(pool))
 
 	router := adaptershttp.NewRouter(adaptershttp.RouterConfig{

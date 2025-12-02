@@ -58,6 +58,20 @@ func (mr *MockAccountRepositoryMockRecorder) Create(ctx, account any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockAccountRepository)(nil).Create), ctx, account)
 }
 
+// CreateTx mocks base method.
+func (m *MockAccountRepository) CreateTx(ctx context.Context, tx usecase.Transaction, account *domain.Account) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTx", ctx, tx, account)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateTx indicates an expected call of CreateTx.
+func (mr *MockAccountRepositoryMockRecorder) CreateTx(ctx, tx, account any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTx", reflect.TypeOf((*MockAccountRepository)(nil).CreateTx), ctx, tx, account)
+}
+
 // GetByID mocks base method.
 func (m *MockAccountRepository) GetByID(ctx context.Context, id string) (*domain.Account, error) {
 	m.ctrl.T.Helper()
@@ -528,6 +542,88 @@ func (m *MockOutboxRepository) MarkPublished(ctx context.Context, id string, pub
 func (mr *MockOutboxRepositoryMockRecorder) MarkPublished(ctx, id, publishedAt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPublished", reflect.TypeOf((*MockOutboxRepository)(nil).MarkPublished), ctx, id, publishedAt)
+}
+
+// MockAuditRepository is a mock of AuditRepository interface.
+type MockAuditRepository struct {
+	ctrl     *gomock.Controller
+	recorder *MockAuditRepositoryMockRecorder
+	isgomock struct{}
+}
+
+// MockAuditRepositoryMockRecorder is the mock recorder for MockAuditRepository.
+type MockAuditRepositoryMockRecorder struct {
+	mock *MockAuditRepository
+}
+
+// NewMockAuditRepository creates a new mock instance.
+func NewMockAuditRepository(ctrl *gomock.Controller) *MockAuditRepository {
+	mock := &MockAuditRepository{ctrl: ctrl}
+	mock.recorder = &MockAuditRepositoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAuditRepository) EXPECT() *MockAuditRepositoryMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockAuditRepository) Create(ctx context.Context, log *domain.AuditLog) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, log)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockAuditRepositoryMockRecorder) Create(ctx, log any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockAuditRepository)(nil).Create), ctx, log)
+}
+
+// CreateTx mocks base method.
+func (m *MockAuditRepository) CreateTx(ctx context.Context, tx usecase.Transaction, log *domain.AuditLog) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTx", ctx, tx, log)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateTx indicates an expected call of CreateTx.
+func (mr *MockAuditRepositoryMockRecorder) CreateTx(ctx, tx, log any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTx", reflect.TypeOf((*MockAuditRepository)(nil).CreateTx), ctx, tx, log)
+}
+
+// GetByResourceID mocks base method.
+func (m *MockAuditRepository) GetByResourceID(ctx context.Context, resourceType, resourceID string) ([]*domain.AuditLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByResourceID", ctx, resourceType, resourceID)
+	ret0, _ := ret[0].([]*domain.AuditLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByResourceID indicates an expected call of GetByResourceID.
+func (mr *MockAuditRepositoryMockRecorder) GetByResourceID(ctx, resourceType, resourceID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByResourceID", reflect.TypeOf((*MockAuditRepository)(nil).GetByResourceID), ctx, resourceType, resourceID)
+}
+
+// List mocks base method.
+func (m *MockAuditRepository) List(ctx context.Context, filter domain.AuditFilter) ([]*domain.AuditLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "List", ctx, filter)
+	ret0, _ := ret[0].([]*domain.AuditLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// List indicates an expected call of List.
+func (mr *MockAuditRepositoryMockRecorder) List(ctx, filter any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockAuditRepository)(nil).List), ctx, filter)
 }
 
 // MockTransaction is a mock of Transaction interface.

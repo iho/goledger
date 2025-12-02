@@ -240,7 +240,9 @@ func accountCmd() *cobra.Command {
 			defer pool.Close()
 
 			accountUC := usecase.NewAccountUseCase(
+				postgres.NewTxManager(pool),
 				postgres.NewAccountRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -282,7 +284,9 @@ func accountCmd() *cobra.Command {
 			defer pool.Close()
 
 			accountUC := usecase.NewAccountUseCase(
+				postgres.NewTxManager(pool),
 				postgres.NewAccountRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -321,7 +325,9 @@ func accountCmd() *cobra.Command {
 			defer pool.Close()
 
 			accountUC := usecase.NewAccountUseCase(
+				postgres.NewTxManager(pool),
 				postgres.NewAccountRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -373,6 +379,7 @@ func transferCmd() *cobra.Command {
 				postgres.NewTransferRepository(pool),
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -428,6 +435,7 @@ func transferCmd() *cobra.Command {
 				postgres.NewTransferRepository(pool),
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -479,6 +487,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewTransferRepository(pool),
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -529,6 +538,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewTransferRepository(pool),
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)
@@ -567,6 +577,7 @@ func holdCmd() *cobra.Command {
 				postgres.NewTransferRepository(pool),
 				postgres.NewEntryRepository(pool),
 				postgres.NewOutboxRepository(pool),
+				postgres.NewAuditRepository(pool),
 				postgres.NewULIDGenerator(),
 				nil,
 			)

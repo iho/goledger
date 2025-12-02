@@ -78,13 +78,6 @@ func MarshalState(v any) JSON {
 	return result
 }
 
-// AuditRepository defines the interface for audit log persistence
-type AuditRepository interface {
-	Create(log *AuditLog) error
-	List(filter AuditFilter) ([]*AuditLog, error)
-	GetByResourceID(resourceType, resourceID string) ([]*AuditLog, error)
-}
-
 // AuditFilter defines filters for querying audit logs
 type AuditFilter struct {
 	UserID       string

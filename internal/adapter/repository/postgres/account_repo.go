@@ -31,7 +31,18 @@ func NewAccountRepository(pool *pgxpool.Pool) *AccountRepository {
 
 // Create creates a new account.
 func (r *AccountRepository) Create(ctx context.Context, account *domain.Account) error {
-	_, err := r.queries.CreateAccount(ctx, generated.CreateAccountParams{
+	return r.create(ctx, r.queries, account)
+}
+
+// CreateTx creates a new account within a transaction.
+func (r *AccountRepository) CreateTx(ctx context.Context, tx usecase.Transaction, account *domain.Account) error {
+	pgxTx := tx.(*Tx).PgxTx()
+	queries := generated.New(pgxTx)
+	return r.create(ctx, queries, account)
+}
+
+func (r *AccountRepository) create(ctx context.Context, queries *generated.Queries, account *domain.Account) error {
+	_, err := queries.CreateAccount(ctx, generated.CreateAccountParams{
 		ID:                   account.ID,
 		Name:                 account.Name,
 		Currency:             account.Currency,
@@ -42,7 +53,6 @@ func (r *AccountRepository) Create(ctx context.Context, account *domain.Account)
 		CreatedAt:            timeToPgTimestamptz(account.CreatedAt),
 		UpdatedAt:            timeToPgTimestamptz(account.UpdatedAt),
 	})
-
 	return err
 }
 

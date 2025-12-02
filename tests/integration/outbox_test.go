@@ -33,7 +33,7 @@ func TestOutboxEventCreation(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil).WithRetrier(retrier)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil).WithRetrier(retrier)
 
 	// Create accounts with balance
 	acc1 := testDB.CreateTestAccountWithBalance(ctx, "acc1", "USD", decimal.NewFromInt(1000), false, true)
@@ -117,7 +117,7 @@ func TestEventPublisher(t *testing.T) {
 	idGen := postgres.NewULIDGenerator()
 	retrier := postgres.NewRetrier()
 
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, nil).WithRetrier(retrier)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil).WithRetrier(retrier)
 
 	// Create accounts and transfer to generate events
 	acc1 := testDB.CreateTestAccountWithBalance(ctx, "acc1", "USD", decimal.NewFromInt(1000), false, true)

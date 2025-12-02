@@ -31,7 +31,7 @@ func TestHoldMetadataPersistence(t *testing.T) {
 	txManager := postgres.NewTxManager(pool)
 	idGen := postgres.NewULIDGenerator()
 
-	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen, nil)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil)
 
 	// Create account with balance
 	acc := testDB.CreateTestAccountWithBalance(ctx, "test-account", "USD", decimal.NewFromInt(1000), false, true)

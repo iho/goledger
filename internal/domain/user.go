@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -15,6 +16,20 @@ type User struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Active         bool
+}
+
+// contextKey is the type for context keys
+type contextKey string
+
+const (
+	// UserContextKey is the context key for the authenticated user
+	UserContextKey contextKey = "user"
+)
+
+// UserFromContext extracts the authenticated user from context
+func UserFromContext(ctx context.Context) (*User, bool) {
+	user, ok := ctx.Value(UserContextKey).(*User)
+	return user, ok
 }
 
 // Role represents a user's access level

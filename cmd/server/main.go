@@ -84,18 +84,19 @@ func main() {
 	ledgerRepo := postgresRepo.NewLedgerRepository(pool)
 	holdRepo := postgresRepo.NewHoldRepository(pool)
 	outboxRepo := postgresRepo.NewOutboxRepository(pool)
+	auditRepo := postgresRepo.NewAuditRepository(pool)
 	userRepo := postgresRepo.NewUserRepository(pool)
 	idempotencyStore := redisRepo.NewIdempotencyStore(redisClient)
 	idGen := postgresRepo.NewULIDGenerator()
 
 	// Initialize use cases with retry support
 	retrier := postgresRepo.NewRetrier()
-	accountUC := usecase.NewAccountUseCase(accountRepo, idGen, m)
-	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, idGen, m).
+	accountUC := usecase.NewAccountUseCase(txManager, accountRepo, auditRepo, idGen, m)
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, auditRepo, idGen, m).
 		WithRetrier(retrier)
 	entryUC := usecase.NewEntryUseCase(entryRepo)
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
-	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, idGen, m)
+	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, auditRepo, idGen, m)
 	userUC := usecase.NewUserUseCase(userRepo)
 
 	// Initialize handlers

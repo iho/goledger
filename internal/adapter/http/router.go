@@ -25,6 +25,7 @@ type RouterConfig struct {
 	HoldHandler      *handler.HoldHandler
 	AuthHandler      *handler.AuthHandler
 	IdempotencyStore usecase.IdempotencyStore
+	RateLimiter      *middleware.RateLimiter
 	Logger           *slog.Logger
 }
 
@@ -35,6 +36,9 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
+	if cfg.RateLimiter != nil {
+		r.Use(cfg.RateLimiter.Limit)
+	}
 	r.Use(middleware.Metrics)
 	if cfg.Logger != nil {
 		r.Use(middleware.NewLoggingMiddleware(cfg.Logger).Wrap)
