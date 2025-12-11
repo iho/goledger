@@ -12,8 +12,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/iho/goledger/internal/adapter/repository/redis"
 )
 
 const (
@@ -21,8 +19,13 @@ const (
 	IdempotencyKeyHeader = "x-idempotency-key"
 )
 
+// IdempotencyStore defines the minimal contract needed for idempotency handling.
+type IdempotencyStore interface {
+	CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, cachedResponse []byte, err error)
+}
+
 // IdempotencyInterceptor creates a gRPC unary interceptor for idempotency
-func IdempotencyInterceptor(store *redis.IdempotencyStore) grpc.UnaryServerInterceptor {
+func IdempotencyInterceptor(store IdempotencyStore) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -63,10 +66,15 @@ func IdempotencyInterceptor(store *redis.IdempotencyStore) grpc.UnaryServerInter
 
 		// Check if we've seen this request before
 		// Use request hash as the stored value to detect body changes
-		exists, cachedHash, err := store.CheckAndSet(ctx, cacheKey, []byte(requestHash), 24*3600*time.Second)
-		if err != nil {
-			// Log error but continue (degraded mode without idempotency)
-			return handler(ctx, req)
+		exists := false
+		var cachedHash []byte
+		var storeErr error
+		if store != nil {
+			exists, cachedHash, storeErr = store.CheckAndSet(ctx, cacheKey, []byte(requestHash), 24*3600*time.Second)
+			if storeErr != nil {
+				// Log error but continue (degraded mode without idempotency)
+				return handler(ctx, req)
+			}
 		}
 
 		if exists {

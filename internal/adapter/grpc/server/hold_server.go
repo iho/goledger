@@ -3,22 +3,33 @@ package server
 import (
 	"context"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/iho/goledger/internal/adapter/grpc/converter"
 	grpcErrors "github.com/iho/goledger/internal/adapter/grpc/errors"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
+// HoldService defines the functionality required by HoldServer.
+type HoldService interface {
+	HoldFunds(ctx context.Context, accountID string, amount decimal.Decimal) (*domain.Hold, error)
+	VoidHold(ctx context.Context, holdID string) error
+	CaptureHold(ctx context.Context, holdID, toAccountID string) (*domain.Transfer, error)
+	ListHoldsByAccount(ctx context.Context, input usecase.ListHoldsByAccountInput) ([]*domain.Hold, error)
+}
+
 // HoldServer implements the gRPC HoldService
 type HoldServer struct {
 	pb.UnimplementedHoldServiceServer
-	holdUC *usecase.HoldUseCase
+	holdUC HoldService
 }
 
 // NewHoldServer creates a new HoldServer
-func NewHoldServer(holdUC *usecase.HoldUseCase) *HoldServer {
+func NewHoldServer(holdUC HoldService) *HoldServer {
 	return &HoldServer{
 		holdUC: holdUC,
 	}

@@ -6,17 +6,25 @@ import (
 	"github.com/iho/goledger/internal/adapter/grpc/converter"
 	grpcErrors "github.com/iho/goledger/internal/adapter/grpc/errors"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 )
+
+// AccountService defines the functionality required by AccountServer.
+type AccountService interface {
+	CreateAccount(ctx context.Context, input usecase.CreateAccountInput) (*domain.Account, error)
+	GetAccount(ctx context.Context, id string) (*domain.Account, error)
+	ListAccounts(ctx context.Context, input usecase.ListAccountsInput) ([]*domain.Account, error)
+}
 
 // AccountServer implements the gRPC AccountService
 type AccountServer struct {
 	pb.UnimplementedAccountServiceServer
-	accountUC *usecase.AccountUseCase
+	accountUC AccountService
 }
 
 // NewAccountServer creates a new AccountServer
-func NewAccountServer(accountUC *usecase.AccountUseCase) *AccountServer {
+func NewAccountServer(accountUC AccountService) *AccountServer {
 	return &AccountServer{
 		accountUC: accountUC,
 	}

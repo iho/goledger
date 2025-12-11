@@ -9,17 +9,27 @@ import (
 	"github.com/iho/goledger/internal/adapter/grpc/converter"
 	grpcErrors "github.com/iho/goledger/internal/adapter/grpc/errors"
 	pb "github.com/iho/goledger/internal/adapter/grpc/pb/goledger/v1"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 )
+
+// TransferService defines the functionality required by TransferServer.
+type TransferService interface {
+	CreateTransfer(ctx context.Context, input usecase.CreateTransferInput) (*domain.Transfer, error)
+	CreateBatchTransfer(ctx context.Context, input usecase.CreateBatchTransferInput) ([]*domain.Transfer, error)
+	GetTransfer(ctx context.Context, id string) (*domain.Transfer, error)
+	ListTransfersByAccount(ctx context.Context, input usecase.ListTransfersByAccountInput) ([]*domain.Transfer, error)
+	ReverseTransfer(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error)
+}
 
 // TransferServer implements the gRPC TransferService
 type TransferServer struct {
 	pb.UnimplementedTransferServiceServer
-	transferUC *usecase.TransferUseCase
+	transferUC TransferService
 }
 
 // NewTransferServer creates a new TransferServer
-func NewTransferServer(transferUC *usecase.TransferUseCase) *TransferServer {
+func NewTransferServer(transferUC TransferService) *TransferServer {
 	return &TransferServer{
 		transferUC: transferUC,
 	}
