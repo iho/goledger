@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -63,6 +64,9 @@ func (m *JWTManager) Verify(tokenString string) (*Claims, error) {
 	)
 
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, domain.ErrExpiredToken
+		}
 		return nil, domain.ErrInvalidToken
 	}
 
