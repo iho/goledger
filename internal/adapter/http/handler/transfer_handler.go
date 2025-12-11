@@ -1,22 +1,33 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/iho/goledger/internal/adapter/http/dto"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 )
 
+// TransferService defines the behavior needed by TransferHandler.
+type TransferService interface {
+	CreateTransfer(ctx context.Context, input usecase.CreateTransferInput) (*domain.Transfer, error)
+	CreateBatchTransfer(ctx context.Context, input usecase.CreateBatchTransferInput) ([]*domain.Transfer, error)
+	GetTransfer(ctx context.Context, id string) (*domain.Transfer, error)
+	ListTransfersByAccount(ctx context.Context, input usecase.ListTransfersByAccountInput) ([]*domain.Transfer, error)
+	ReverseTransfer(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error)
+}
+
 // TransferHandler handles transfer-related HTTP requests.
 type TransferHandler struct {
-	transferUC *usecase.TransferUseCase
+	transferUC TransferService
 }
 
 // NewTransferHandler creates a new TransferHandler.
-func NewTransferHandler(transferUC *usecase.TransferUseCase) *TransferHandler {
+func NewTransferHandler(transferUC TransferService) *TransferHandler {
 	return &TransferHandler{transferUC: transferUC}
 }
 
