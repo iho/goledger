@@ -195,10 +195,7 @@ func TestAccountHandler_List(t *testing.T) {
 }
 
 func setChiURLParam(r *http.Request, key, value string) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, &chi.Context{
-		URLParams: chi.RouteParams{
-			Keys:   []string{key},
-			Values: []string{value},
-		},
-	}))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add(key, value)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, routeCtx))
 }
