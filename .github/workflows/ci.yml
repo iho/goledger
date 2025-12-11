@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   lint:
     name: Lint
@@ -22,11 +26,11 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: v2.5.0
-          args: --timeout=5m
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0
+
+      - name: Run golangci-lint
+        run: golangci-lint run --format=github-actions --timeout=5m
 
   test:
     name: Test
@@ -147,6 +151,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./docker/Dockerfile
           push: false
           tags: goledger:${{ github.sha }}
           cache-from: type=gha
