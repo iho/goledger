@@ -1,4 +1,4 @@
-.PHONY: all build run test test-integration test-coverage migrate-up migrate-down sqlc docker-up docker-down clean lint
+.PHONY: all build run test test-integration test-coverage coverage-percent migrate-up migrate-down sqlc docker-up docker-down clean lint
 
 # Build variables
 BINARY_NAME=goledger
@@ -64,6 +64,11 @@ test-docker:
 test-coverage:
 	gotestsum --format testdox -- -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+
+# Show coverage percentage summary
+coverage-percent:
+	go test ./... -coverprofile=coverage.out >/dev/null
+	@go tool cover -func=coverage.out | tail -n 1
 
 # Start development environment
 docker-up:
