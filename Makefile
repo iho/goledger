@@ -1,4 +1,4 @@
-.PHONY: all build run test test-integration test-coverage sqlc docker-up docker-down clean lint
+.PHONY: all build run test test-integration test-coverage migrate-up migrate-down sqlc docker-up docker-down clean lint
 
 # Build variables
 BINARY_NAME=goledger
@@ -44,9 +44,16 @@ test-integration: docker-up
 	sleep 2
 	gotestsum --format testdox -- -race ./tests/integration/...
 
-# Run all tests
+# Run tests
 test-all:
 	gotestsum --format testdox -- -race ./...
+
+# Run database migrations
+migrate-up:
+	go run ./cmd/cli migrate up
+
+migrate-down:
+	go run ./cmd/cli migrate down
 
 # Run tests in Docker
 test-docker:
