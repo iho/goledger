@@ -1,22 +1,31 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/iho/goledger/internal/adapter/http/dto"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 )
 
+// AccountService defines the behavior needed by AccountHandler.
+type AccountService interface {
+	CreateAccount(ctx context.Context, input usecase.CreateAccountInput) (*domain.Account, error)
+	GetAccount(ctx context.Context, id string) (*domain.Account, error)
+	ListAccounts(ctx context.Context, input usecase.ListAccountsInput) ([]*domain.Account, error)
+}
+
 // AccountHandler handles account-related HTTP requests.
 type AccountHandler struct {
-	accountUC *usecase.AccountUseCase
+	accountUC AccountService
 }
 
 // NewAccountHandler creates a new AccountHandler.
-func NewAccountHandler(accountUC *usecase.AccountUseCase) *AccountHandler {
+func NewAccountHandler(accountUC AccountService) *AccountHandler {
 	return &AccountHandler{accountUC: accountUC}
 }
 
