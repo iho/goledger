@@ -10,12 +10,20 @@ import (
 )
 
 // TxManager implements usecase.TransactionManager.
+type pgxPool interface {
+	Begin(context.Context) (pgx.Tx, error)
+}
+
 type TxManager struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 // NewTxManager creates a new TxManager.
 func NewTxManager(pool *pgxpool.Pool) *TxManager {
+	return newTxManagerWithPool(pool)
+}
+
+func newTxManagerWithPool(pool pgxPool) *TxManager {
 	return &TxManager{pool: pool}
 }
 

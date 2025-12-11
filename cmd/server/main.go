@@ -175,11 +175,7 @@ func main() {
 	}()
 
 	// Start gRPC server in goroutine
-	grpcPort := "50051" // Default gRPC port
-	if os.Getenv("GRPC_PORT") != "" {
-		grpcPort = os.Getenv("GRPC_PORT")
-	}
-
+	grpcPort := resolveGRPCPort()
 	go func() {
 		lis, err := net.Listen("tcp", ":"+grpcPort)
 		if err != nil {
@@ -220,4 +216,11 @@ func main() {
 	}
 
 	l.Info("servers stopped")
+}
+
+func resolveGRPCPort() string {
+	if port := os.Getenv("GRPC_PORT"); port != "" {
+		return port
+	}
+	return "50051"
 }

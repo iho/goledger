@@ -67,7 +67,8 @@ test-coverage:
 
 # Show coverage percentage summary
 coverage-percent:
-	go test ./... -coverprofile=coverage.out >/dev/null
+	@packages=$$(go list ./cmd/... ./internal/... ./proto/... | grep -v '/mocks' | grep -v '/internal/infrastructure/postgres/generated' | grep -v '/proto/'); \
+		go test $$packages -coverprofile=coverage.out >/dev/null
 	@go tool cover -func=coverage.out | tail -n 1
 
 # Start development environment

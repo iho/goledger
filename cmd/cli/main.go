@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	databaseURL string
-	jsonOutput  bool
+	databaseURL    string
+	jsonOutput     bool
+	bcryptGenerate = bcrypt.GenerateFromPassword
 )
 
 func main() {
@@ -626,7 +627,7 @@ func hashPasswordCmd() *cobra.Command {
 		Short: "Generate bcrypt hash for a password",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			hash, err := bcrypt.GenerateFromPassword([]byte(args[0]), bcrypt.DefaultCost)
+			hash, err := bcryptGenerate([]byte(args[0]), bcrypt.DefaultCost)
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 				os.Exit(1)
@@ -660,7 +661,7 @@ func mustConnectDB(ctx context.Context) *pgxpool.Pool {
 }
 
 func createUser(ctx context.Context, pool *pgxpool.Pool, email, name, password, role string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcryptGenerate([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
