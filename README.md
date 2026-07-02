@@ -60,11 +60,18 @@ export DATABASE_URL="postgres://ledger:ledger@localhost:5432/ledger?sslmode=disa
 | Command | Description | Example |
 |---------|-------------|---------|
 | `user create` | Create a new user | `./bin/cli user create --email u@x.com --password pass --role admin` |
+| `user list` | List users | `./bin/cli user list` |
 | `account create` | Create an account | `./bin/cli account create --name "Wallet" --currency USD` |
 | `account list` | List accounts | `./bin/cli account list` |
+| `account get [id]` | Get an account | `./bin/cli account get acc_123` |
 | `transfer create` | Transfer funds | `./bin/cli transfer create --from [id] --to [id] --amount 100` |
+| `transfer get [id]` | Get a transfer | `./bin/cli transfer get txn_123` |
 | `hold create` | Hold funds | `./bin/cli hold create --account [id] --amount 50` |
-| `migrate up` | Run DB migrations | `./bin/cli migrate up` |
+| `hold capture [hold-id]` | Capture a hold | `./bin/cli hold capture hold_123 --to acc_456` |
+| `hold void [hold-id]` | Void a hold | `./bin/cli hold void hold_123` |
+| `ledger consistency` | Check ledger consistency | `./bin/cli ledger consistency` |
+| `hash-password [password]` | Hash a password for manual DB insertion | `./bin/cli hash-password mypass` |
+| `migrate up` / `migrate down` | Run/rollback DB migrations | `./bin/cli migrate up` |
 
 ## Observability & Monitoring
 
@@ -88,29 +95,44 @@ Base URL: `http://localhost:8080/api/v1`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/auth/login` | Log in and receive a JWT |
+| GET | `/auth/me` | Get the authenticated user |
+| GET | `/ledger/consistency` | Check ledger-wide balance consistency |
 | POST | `/accounts` | Create account |
-| GET | `/accounts/:id` | Get account |
 | GET | `/accounts` | List accounts |
+| GET | `/accounts/:id` | Get account |
+| GET | `/accounts/:id/entries` | List entries for an account |
+| GET | `/accounts/:id/transfers` | List transfers for an account |
+| GET | `/accounts/:id/balance/history` | Historical balance |
 | POST | `/transfers` | Create transfer |
 | POST | `/transfers/batch` | Batch transfer (atomic) |
 | GET | `/transfers/:id` | Get transfer |
-| GET | `/accounts/:id/entries` | List entries |
-| GET | `/accounts/:id/balance/history` | Historical balance |
+| GET | `/transfers/:id/entries` | List entries for a transfer |
+| POST | `/transfers/:id/reverse` | Reverse a transfer |
 | POST | `/holds` | Create hold |
 | POST | `/holds/:id/capture` | Capture hold |
 | POST | `/holds/:id/void` | Void hold |
+
+Unauthenticated: `GET /health`, `GET /ready`, `GET /metrics` (Prometheus).
 
 ## Configuration
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `DATABASE_URL` | `postgres://...` | PostgreSQL Connection URL |
-| `REDIS_URL` | `redis://...` | Redis Connection URL |
+| `DATABASE_URL` | `postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable` | PostgreSQL connection URL |
+| `DATABASE_MAX_CONNS` | `25` | Max pool connections |
+| `DATABASE_MIN_CONNS` | `5` | Min pool connections |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
 | `HTTP_PORT` | `8080` | HTTP server port |
 | `GRPC_PORT` | `50051` | gRPC server port |
-| `AUTH_ENABLED` | `true` | Enable JWT authentication |
-| `JWT_SECRET` | `secret` | JWT signing key |
+| `AUTH_ENABLED` | `false` | Enable JWT authentication |
+| `JWT_SECRET` | *(empty)* | JWT signing key — **required** when `AUTH_ENABLED=true`; the server refuses to start otherwise |
+| `JWT_EXPIRATION` | `24h` | JWT token lifetime |
+| `IDEMPOTENCY_TTL` | `24h` | How long idempotency keys are cached in Redis |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
+| `LOG_FORMAT` | `json` | Log format (json, text) |
+
+Configuration is validated at startup — invalid values (e.g. a non-numeric `HTTP_PORT`, or `DATABASE_MIN_CONNS` greater than `DATABASE_MAX_CONNS`) fail fast with a clear error instead of misbehaving at runtime.
 
 ## Architecture
 
@@ -139,13 +161,15 @@ Base URL: `http://localhost:8080/api/v1`
 ## Development
 
 ```bash
-make deps           # Download dependencies
-make generate       # Generate sqlc + mocks
-make build          # Build binary
-make test           # Run unit tests
-make test-all       # Run all tests (unit + integration)
-make test-coverage  # Generate coverage report
-make lint           # Run golangci-lint
+make deps             # Download dependencies
+make generate         # Generate sqlc + mocks
+make build            # Build binary
+make test             # Run unit tests
+make test-integration # Run integration tests (requires Docker)
+make test-all         # Run all tests (unit + integration)
+make test-coverage    # Generate coverage report (coverage.html)
+make coverage-percent # Print total coverage percentage
+make lint             # Run golangci-lint
 ```
 
 ## Tech Stack
