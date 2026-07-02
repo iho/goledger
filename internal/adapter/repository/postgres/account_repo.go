@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -150,8 +151,8 @@ func (r *AccountRepository) UpdateBalanceAndEncumbered(ctx context.Context, tx u
 // List lists accounts with pagination.
 func (r *AccountRepository) List(ctx context.Context, limit, offset int) ([]*domain.Account, error) {
 	rows, err := r.queries.ListAccounts(ctx, generated.ListAccountsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  toInt32(limit),
+		Offset: toInt32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -204,4 +205,18 @@ func numericToDecimal(n pgtype.Numeric) decimal.Decimal {
 
 func timeToPgTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
+// toInt32 clamps an int (typically a caller-supplied pagination limit or
+// offset) to the int32 range before it's passed to generated query params,
+// so the conversion can never silently overflow/wrap.
+func toInt32(n int) int32 {
+	switch {
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	case n < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(n)
+	}
 }

@@ -100,7 +100,7 @@ type fakeLedgerRepository struct {
 	calls        int
 }
 
-func (f *fakeLedgerRepository) CheckConsistency(ctx context.Context) (decimal.Decimal, decimal.Decimal, error) {
+func (f *fakeLedgerRepository) CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error) {
 	f.calls++
 	return f.totalBalance, f.totalAmount, f.err
 }

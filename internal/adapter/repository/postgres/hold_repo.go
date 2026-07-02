@@ -107,8 +107,8 @@ func (r *HoldRepository) UpdateStatus(ctx context.Context, tx usecase.Transactio
 func (r *HoldRepository) ListByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Hold, error) {
 	rows, err := r.queries.ListHoldsByAccount(ctx, generated.ListHoldsByAccountParams{
 		AccountID: accountID,
-		Limit:     int32(limit),
-		Offset:    int32(offset),
+		Limit:     toInt32(limit),
+		Offset:    toInt32(offset),
 	})
 	if err != nil {
 		return nil, err

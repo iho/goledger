@@ -42,7 +42,7 @@ func TestMetricsMiddlewareRecordsRequest(t *testing.T) {
 				w.WriteHeader(tc.statusCode)
 			})
 
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rr := httptest.NewRecorder()
 
 			Metrics(next).ServeHTTP(rr, req)

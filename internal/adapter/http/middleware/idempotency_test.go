@@ -66,7 +66,7 @@ func TestIdempotencyMiddleware_DoesNotCacheFailedResponses(t *testing.T) {
 	}
 }
 
-func (f *fakeIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (bool, []byte, error) {
+func (f *fakeIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, value []byte, err error) {
 	if f.checkAndSetFn != nil {
 		return f.checkAndSetFn(ctx, key, response, ttl)
 	}
@@ -84,7 +84,7 @@ func TestIdempotencyMiddleware_SkipsNonMutatingRequests(t *testing.T) {
 	store := &fakeIdempotencyStore{}
 	mw := NewIdempotencyMiddleware(store)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/accounts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/accounts", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	called := false

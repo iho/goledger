@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,8 +37,8 @@ func NewPoolWithConfig(ctx context.Context, cfg PoolConfig) (*pgxpool.Pool, erro
 		return nil, fmt.Errorf("failed to parse database URL: %w", err)
 	}
 
-	config.MaxConns = int32(cfg.MaxConns)
-	config.MinConns = int32(cfg.MinConns)
+	config.MaxConns = toInt32(cfg.MaxConns)
+	config.MinConns = toInt32(cfg.MinConns)
 	config.MaxConnLifetime = cfg.MaxConnLifetime
 	config.MaxConnIdleTime = cfg.MaxConnIdleTime
 
@@ -53,4 +54,17 @@ func NewPoolWithConfig(ctx context.Context, cfg PoolConfig) (*pgxpool.Pool, erro
 	}
 
 	return pool, nil
+}
+
+// toInt32 clamps an int to the int32 range before it's used to configure
+// the pool, so the conversion can never silently overflow/wrap.
+func toInt32(n int) int32 {
+	switch {
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	case n < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(n)
+	}
 }

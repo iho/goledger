@@ -13,12 +13,12 @@ import (
 )
 
 func TestParseIntQuery(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/accounts?limit=50", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts?limit=50", http.NoBody)
 	if got := parseIntQuery(req, "limit", 10); got != 50 {
 		t.Fatalf("expected limit=50, got %d", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/accounts?limit=invalid", nil)
+	req = httptest.NewRequest(http.MethodGet, "/accounts?limit=invalid", http.NoBody)
 	if got := parseIntQuery(req, "limit", 10); got != 10 {
 		t.Fatalf("expected fallback to default, got %d", got)
 	}

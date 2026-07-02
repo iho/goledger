@@ -125,7 +125,6 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 	if filter.Offset > 0 {
 		query += fmt.Sprintf(" OFFSET $%d", argPos)
 		args = append(args, filter.Offset)
-		argPos++
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)

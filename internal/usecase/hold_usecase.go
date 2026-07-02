@@ -31,7 +31,7 @@ func NewHoldUseCase(
 	outboxRepo OutboxRepository,
 	auditRepo AuditRepository,
 	idGen IDGenerator,
-	metrics *metrics.Metrics,
+	m *metrics.Metrics,
 ) *HoldUseCase {
 	return &HoldUseCase{
 		txManager:    txManager,
@@ -42,7 +42,7 @@ func NewHoldUseCase(
 		outboxRepo:   outboxRepo,
 		auditRepo:    auditRepo,
 		idGen:        idGen,
-		metrics:      metrics,
+		metrics:      m,
 	}
 }
 

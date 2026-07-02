@@ -17,6 +17,16 @@ linters:
         - diagnostic
         - style
         - performance
+      settings:
+        # Repository row->domain conversion helpers and one-time-call
+        # constructors pass small (<256 byte) structs by value; that's
+        # idiomatic Go, not a hot-path performance issue. Raise the
+        # default 80-byte threshold instead of restructuring every
+        # rowToX(row generated.X) helper to take a pointer.
+        hugeParam:
+          sizeThreshold: 256
+        rangeValCopy:
+          sizeThreshold: 256
 
     gosec:
       excludes:

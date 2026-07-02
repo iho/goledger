@@ -90,8 +90,8 @@ func (r *TransferRepository) GetByID(ctx context.Context, id string) (*domain.Tr
 func (r *TransferRepository) ListByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Transfer, error) {
 	rows, err := r.queries.ListTransfersByAccount(ctx, generated.ListTransfersByAccountParams{
 		FromAccountID: accountID,
-		Limit:         int32(limit),
-		Offset:        int32(offset),
+		Limit:         toInt32(limit),
+		Offset:        toInt32(offset),
 	})
 	if err != nil {
 		return nil, err

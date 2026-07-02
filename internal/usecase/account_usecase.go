@@ -25,14 +25,14 @@ func NewAccountUseCase(
 	accountRepo AccountRepository,
 	auditRepo AuditRepository,
 	idGen IDGenerator,
-	metrics *metrics.Metrics,
+	m *metrics.Metrics,
 ) *AccountUseCase {
 	return &AccountUseCase{
 		txManager:   txManager,
 		accountRepo: accountRepo,
 		auditRepo:   auditRepo,
 		idGen:       idGen,
-		metrics:     metrics,
+		metrics:     m,
 	}
 }
 

@@ -32,6 +32,14 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run contains the server bootstrap and lifecycle. It returns an exit code
+// instead of calling os.Exit directly, so every defer registered along the
+// way (closing the DB pool, the Redis client, canceling the event publisher
+// context, etc.) actually runs before the process exits.
+func run() int {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -54,7 +62,7 @@ func main() {
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, cfg.DatabaseMaxConns, cfg.DatabaseMinConns)
 	if err != nil {
 		l.Error("failed to connect to postgres", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer pool.Close()
 
@@ -63,14 +71,14 @@ func main() {
 	// Run migrations
 	if err := postgres.RunMigrations(cfg.DatabaseURL, "internal/infrastructure/postgres/migrations"); err != nil {
 		l.Error("failed to run migrations", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// Connect to Redis
 	redisClient, err := redis.NewClient(ctx, cfg.RedisURL)
 	if err != nil {
 		l.Error("failed to connect to redis", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer redisClient.Close()
 
@@ -212,10 +220,12 @@ func main() {
 	// Shutdown HTTP server
 	if err := httpServer.Shutdown(ctx); err != nil {
 		l.Error("HTTP server forced to shutdown", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	l.Info("servers stopped")
+
+	return 0
 }
 
 func resolveGRPCPort() string {

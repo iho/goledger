@@ -64,8 +64,8 @@ func (r *EntryRepository) GetByTransfer(ctx context.Context, transferID string) 
 func (r *EntryRepository) GetByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Entry, error) {
 	rows, err := r.queries.GetEntriesByAccount(ctx, generated.GetEntriesByAccountParams{
 		AccountID: accountID,
-		Limit:     int32(limit),
-		Offset:    int32(offset),
+		Limit:     toInt32(limit),
+		Offset:    toInt32(offset),
 	})
 	if err != nil {
 		return nil, err

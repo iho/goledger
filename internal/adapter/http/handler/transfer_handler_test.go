@@ -196,7 +196,7 @@ func TestTransferHandler_Get(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/transfers/tx-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/transfers/tx-1", http.NoBody)
 	req = setChiURLParam(req, "id", "tx-1")
 	rec := httptest.NewRecorder()
 
@@ -227,7 +227,7 @@ func TestTransferHandler_ListByAccount(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1/transfers?limit=5&offset=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1/transfers?limit=5&offset=1", http.NoBody)
 	req = setChiURLParam(req, "id", "acc-1")
 	rec := httptest.NewRecorder()
 

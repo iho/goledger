@@ -132,7 +132,7 @@ func TestAccountHandler_Get(t *testing.T) {
 		listFn:   func(ctx context.Context, input usecase.ListAccountsInput) ([]*domain.Account, error) { return nil, nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1", http.NoBody)
 	req = req.WithContext(context.Background())
 	req = setChiURLParam(req, "id", "acc-1")
 	rec := httptest.NewRecorder()
@@ -153,7 +153,7 @@ func TestAccountHandler_Get_NotFound(t *testing.T) {
 		listFn:   func(ctx context.Context, input usecase.ListAccountsInput) ([]*domain.Account, error) { return nil, nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts/acc-1", http.NoBody)
 	req = setChiURLParam(req, "id", "acc-1")
 	rec := httptest.NewRecorder()
 
@@ -176,7 +176,7 @@ func TestAccountHandler_List(t *testing.T) {
 		getFn:    func(ctx context.Context, id string) (*domain.Account, error) { return nil, nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/accounts?limit=5&offset=2", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts?limit=5&offset=2", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	handler.List(rec, req)

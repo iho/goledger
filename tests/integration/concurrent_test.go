@@ -96,7 +96,7 @@ func TestConcurrentTransfers(t *testing.T) {
 		dest := testDB.CreateTestAccount(ctx, "dest", "USD", false, true)
 
 		numTransfers := 20
-		transferAmount := decimal.NewFromInt(10) // 20 * 10 = 200 > 100
+		transferAmount := decimal.NewFromInt(10) // total requested exceeds the 100 balance, so some must be rejected
 
 		var (
 			wg           sync.WaitGroup

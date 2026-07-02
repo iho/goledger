@@ -180,9 +180,9 @@ func userCmd() *cobra.Command {
 	createCmd.Flags().StringVar(&password, "password", "", "User password (required)")
 	createCmd.Flags().StringVar(&name, "name", "", "User name (required)")
 	createCmd.Flags().StringVar(&role, "role", "viewer", "User role (admin, operator, viewer)")
-	createCmd.MarkFlagRequired("email")
-	createCmd.MarkFlagRequired("password")
-	createCmd.MarkFlagRequired("name")
+	_ = createCmd.MarkFlagRequired("email")
+	_ = createCmd.MarkFlagRequired("password")
+	_ = createCmd.MarkFlagRequired("name")
 
 	// List users
 	listCmd := &cobra.Command{
@@ -272,7 +272,7 @@ func accountCmd() *cobra.Command {
 	createCmd.Flags().StringVar(&currency, "currency", "USD", "Currency code")
 	createCmd.Flags().BoolVar(&allowNegative, "allow-negative", false, "Allow negative balance")
 	createCmd.Flags().BoolVar(&allowPositive, "allow-positive", true, "Allow positive balance")
-	createCmd.MarkFlagRequired("name")
+	_ = createCmd.MarkFlagRequired("name")
 
 	// List accounts
 	var limit, offset int
@@ -415,9 +415,9 @@ func transferCmd() *cobra.Command {
 	createCmd.Flags().StringVar(&toID, "to", "", "Destination account ID (required)")
 	createCmd.Flags().StringVar(&amount, "amount", "", "Transfer amount (required)")
 	createCmd.Flags().StringVar(&description, "description", "", "Transfer description")
-	createCmd.MarkFlagRequired("from")
-	createCmd.MarkFlagRequired("to")
-	createCmd.MarkFlagRequired("amount")
+	_ = createCmd.MarkFlagRequired("from")
+	_ = createCmd.MarkFlagRequired("to")
+	_ = createCmd.MarkFlagRequired("amount")
 
 	// Get transfer
 	getCmd := &cobra.Command{
@@ -517,8 +517,8 @@ func holdCmd() *cobra.Command {
 	createCmd.Flags().StringVar(&accountID, "account", "", "Account ID (required)")
 	createCmd.Flags().StringVar(&amount, "amount", "", "Hold amount (required)")
 	createCmd.Flags().StringVar(&description, "description", "", "Hold description")
-	createCmd.MarkFlagRequired("account")
-	createCmd.MarkFlagRequired("amount")
+	_ = createCmd.MarkFlagRequired("account")
+	_ = createCmd.MarkFlagRequired("amount")
 
 	// Capture hold
 	var captureToID string
@@ -558,7 +558,7 @@ func holdCmd() *cobra.Command {
 		},
 	}
 	captureCmd.Flags().StringVar(&captureToID, "to", "", "Destination account ID (required)")
-	captureCmd.MarkFlagRequired("to")
+	_ = captureCmd.MarkFlagRequired("to")
 
 	// Void hold
 	voidCmd := &cobra.Command{

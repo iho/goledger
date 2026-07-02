@@ -63,7 +63,7 @@ type stubLedgerRepository struct {
 	checkFn func(ctx context.Context) (decimal.Decimal, decimal.Decimal, error)
 }
 
-func (s *stubLedgerRepository) CheckConsistency(ctx context.Context) (decimal.Decimal, decimal.Decimal, error) {
+func (s *stubLedgerRepository) CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error) {
 	return s.checkFn(ctx)
 }
 

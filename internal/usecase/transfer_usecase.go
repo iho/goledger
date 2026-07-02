@@ -39,7 +39,7 @@ func NewTransferUseCase(
 	outboxRepo OutboxRepository,
 	auditRepo AuditRepository,
 	idGen IDGenerator,
-	metrics *metrics.Metrics,
+	m *metrics.Metrics,
 ) *TransferUseCase {
 	return &TransferUseCase{
 		txManager:    txManager,
@@ -50,7 +50,7 @@ func NewTransferUseCase(
 		auditRepo:    auditRepo,
 		idGen:        idGen,
 		retrier:      &noopRetrier{},
-		metrics:      metrics,
+		metrics:      m,
 	}
 }
 

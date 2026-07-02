@@ -21,7 +21,7 @@ func TestNewRouter_HealthEndpointAvailable(t *testing.T) {
 	router := NewRouter(newRouterConfig())
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -35,7 +35,7 @@ func TestNewRouter_RateLimiterBlocksExcessRequests(t *testing.T) {
 		cfg.RateLimiter = rl
 	}))
 
-	req1 := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req1 := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	req1.RemoteAddr = "1.2.3.4:1234"
 	rec1 := httptest.NewRecorder()
 	router.ServeHTTP(rec1, req1)
@@ -43,7 +43,7 @@ func TestNewRouter_RateLimiterBlocksExcessRequests(t *testing.T) {
 		t.Fatalf("expected first request to succeed, got %d", rec1.Code)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	req2.RemoteAddr = "1.2.3.4:1234"
 	rec2 := httptest.NewRecorder()
 	router.ServeHTTP(rec2, req2)
@@ -187,7 +187,7 @@ func (stubEntryRepository) GetBalanceAtTime(ctx context.Context, accountID strin
 
 type stubLedgerRepository struct{}
 
-func (stubLedgerRepository) CheckConsistency(ctx context.Context) (decimal.Decimal, decimal.Decimal, error) {
+func (stubLedgerRepository) CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error) {
 	return decimal.Zero, decimal.Zero, nil
 }
 
@@ -195,7 +195,7 @@ type stubIdempotencyStore struct {
 	checkCalled bool
 }
 
-func (s *stubIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (bool, []byte, error) {
+func (s *stubIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, value []byte, err error) {
 	s.checkCalled = true
 	return false, nil, nil
 }

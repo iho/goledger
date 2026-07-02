@@ -151,7 +151,7 @@ func ValidatePassword(password string) error {
 }
 
 // ValidatePagination validates and limits pagination parameters
-func ValidatePagination(limit, offset int) (validLimit int, validOffset int, err error) {
+func ValidatePagination(limit, offset int) (validLimit, validOffset int, err error) {
 	const MaxPageSize = 1000
 	const DefaultPageSize = 50
 

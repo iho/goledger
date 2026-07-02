@@ -26,7 +26,7 @@ type fakeIdempotencyStore struct {
 	called bool
 }
 
-func (f *fakeIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (bool, []byte, error) {
+func (f *fakeIdempotencyStore) CheckAndSet(ctx context.Context, key string, response []byte, ttl time.Duration) (exists bool, value []byte, err error) {
 	f.called = true
 	return f.exists, f.value, f.err
 }

@@ -29,7 +29,7 @@ func NewTestDB(t *testing.T) *TestDB {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable"
+		dbURL = "postgres://ledger:ledger@localhost:5432/ledger?sslmode=disable" // #nosec G101 -- local test-only default, matches docker-compose.test.yml
 	}
 
 	// Run migrations

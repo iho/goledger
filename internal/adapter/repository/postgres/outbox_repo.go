@@ -51,7 +51,7 @@ func (r *OutboxRepository) Create(ctx context.Context, tx usecase.Transaction, e
 
 // GetUnpublished retrieves unpublished events.
 func (r *OutboxRepository) GetUnpublished(ctx context.Context, limit int) ([]*domain.OutboxEvent, error) {
-	rows, err := r.queries.GetUnpublishedEvents(ctx, int32(limit))
+	rows, err := r.queries.GetUnpublishedEvents(ctx, toInt32(limit))
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +77,8 @@ func (r *OutboxRepository) GetByAggregate(ctx context.Context, aggregateType, ag
 	rows, err := r.queries.GetEventsByAggregate(ctx, generated.GetEventsByAggregateParams{
 		AggregateType: aggregateType,
 		AggregateID:   aggregateID,
-		Limit:         int32(limit),
-		Offset:        int32(offset),
+		Limit:         toInt32(limit),
+		Offset:        toInt32(offset),
 	})
 	if err != nil {
 		return nil, err

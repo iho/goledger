@@ -240,7 +240,7 @@ func TestTransferUseCase_MetricsSuccess(t *testing.T) {
 	idGen := mocks.NewMockIDGenerator(ctrl)
 	mockTx := mocks.NewMockTransaction(ctrl)
 
-	metrics := newTestMetrics()
+	testMetrics := newTestMetrics()
 
 	txMgr.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
 	accRepo.EXPECT().GetByIDsForUpdate(gomock.Any(), mockTx, gomock.Any()).Return([]*domain.Account{
@@ -255,7 +255,7 @@ func TestTransferUseCase_MetricsSuccess(t *testing.T) {
 	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, nil, idGen, metrics)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, nil, idGen, testMetrics)
 
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
@@ -266,19 +266,19 @@ func TestTransferUseCase_MetricsSuccess(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := testutil.ToFloat64(metrics.TransfersCreated); got != 1 {
+	if got := testutil.ToFloat64(testMetrics.TransfersCreated); got != 1 {
 		t.Fatalf("expected TransfersCreated=1, got %f", got)
 	}
 
-	if got := testutil.ToFloat64(metrics.TransferErrors.WithLabelValues("create_failed")); got != 0 {
+	if got := testutil.ToFloat64(testMetrics.TransferErrors.WithLabelValues("create_failed")); got != 0 {
 		t.Fatalf("expected no transfer errors, got %f", got)
 	}
 
-	if count := testutil.CollectAndCount(metrics.TransferDuration); count == 0 {
+	if count := testutil.CollectAndCount(testMetrics.TransferDuration); count == 0 {
 		t.Fatalf("expected transfer duration to record observation")
 	}
 
-	if count := testutil.CollectAndCount(metrics.TransferAmount); count == 0 {
+	if count := testutil.CollectAndCount(testMetrics.TransferAmount); count == 0 {
 		t.Fatalf("expected transfer amount to record observation")
 	}
 }
@@ -295,7 +295,7 @@ func TestTransferUseCase_MetricsError(t *testing.T) {
 	idGen := mocks.NewMockIDGenerator(ctrl)
 	mockTx := mocks.NewMockTransaction(ctrl)
 
-	metrics := newTestMetrics()
+	testMetrics := newTestMetrics()
 
 	txMgr.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
 	accRepo.EXPECT().GetByIDsForUpdate(gomock.Any(), mockTx, gomock.Any()).Return([]*domain.Account{
@@ -309,7 +309,7 @@ func TestTransferUseCase_MetricsError(t *testing.T) {
 	outboxRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(errors.New("outbox failure"))
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, nil, idGen, metrics)
+	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, nil, idGen, testMetrics)
 
 	_, err := uc.CreateTransfer(context.Background(), usecase.CreateTransferInput{
 		FromAccountID: "acc-1",
@@ -320,7 +320,7 @@ func TestTransferUseCase_MetricsError(t *testing.T) {
 		t.Fatalf("expected error when outbox creation fails")
 	}
 
-	if got := testutil.ToFloat64(metrics.TransferErrors.WithLabelValues("create_failed")); got != 1 {
+	if got := testutil.ToFloat64(testMetrics.TransferErrors.WithLabelValues("create_failed")); got != 1 {
 		t.Fatalf("expected transfer error count 1, got %f", got)
 	}
 }
