@@ -125,7 +125,7 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 			ResourceID:   hold.ID,
 			AfterState:   domain.MarshalState(hold),
 			Status:       string(domain.AuditStatusSuccess),
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().UTC(),
 		}
 		if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
 			return nil, err
@@ -226,7 +226,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 			ResourceType: "hold",
 			ResourceID:   holdID,
 			Status:       string(domain.AuditStatusSuccess),
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().UTC(),
 		}
 		_ = uc.auditRepo.Create(ctx, auditLog)
 	}
@@ -325,15 +325,12 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 		return nil, err
 	}
 
-	// Update From Account
+	// Update From Account: balance and encumbered balance must move together
+	// in a single statement, otherwise an account with other concurrent
+	// holds would momentarily violate the available-balance CHECK
+	// constraint between the two updates.
 	fromNewEncumbered := fromAccount.EncumberedBalance.Sub(hold.Amount)
-	// Update balance AND encumbered balance.
-	// We need to call UpdateBalance and UpdateEncumberedBalance.
-	// Or strictly: we should probably add `UpdateAccountState` to repo to do both, but doing two updates in same TX is fine.
-	if err := uc.accountRepo.UpdateBalance(txCtx, tx, fromAccount.ID, fromNewBalance, now); err != nil {
-		return nil, err
-	}
-	if err := uc.accountRepo.UpdateEncumberedBalance(txCtx, tx, fromAccount.ID, fromNewEncumbered, now); err != nil {
+	if err := uc.accountRepo.UpdateBalanceAndEncumbered(txCtx, tx, fromAccount.ID, fromNewBalance, fromNewEncumbered, now); err != nil {
 		return nil, err
 	}
 
@@ -406,7 +403,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 			ResourceID:   holdID,
 			AfterState:   domain.MarshalState(transfer),
 			Status:       string(domain.AuditStatusSuccess),
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().UTC(),
 		}
 		_ = uc.auditRepo.Create(ctx, auditLog)
 	}

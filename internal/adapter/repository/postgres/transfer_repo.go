@@ -6,12 +6,20 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
 	"github.com/iho/goledger/internal/usecase"
 )
+
+// pgErrUniqueViolation is the PostgreSQL error code for a unique constraint violation.
+const pgErrUniqueViolation = "23505"
+
+// reversalUniqueIndexName is the unique partial index enforcing that a
+// transfer can only be reversed once (see migration 000007).
+const reversalUniqueIndexName = "idx_transfers_reversed_transfer_id"
 
 // TransferRepository implements usecase.TransferRepository.
 type TransferRepository struct {
@@ -52,8 +60,16 @@ func (r *TransferRepository) Create(ctx context.Context, tx usecase.Transaction,
 		Metadata:           metadata,
 		ReversedTransferID: transfer.ReversedTransferID,
 	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgErrUniqueViolation && pgErr.ConstraintName == reversalUniqueIndexName {
+			return domain.ErrTransferAlreadyReversed
+		}
 
-	return err
+		return err
+	}
+
+	return nil
 }
 
 // GetByID retrieves a transfer by ID.

@@ -22,6 +22,11 @@ UPDATE accounts
 SET encumbered_balance = $2, version = version + 1, updated_at = $3
 WHERE id = $1;
 
+-- name: UpdateAccountBalanceAndEncumbered :exec
+UPDATE accounts
+SET balance = $2, encumbered_balance = $3, version = version + 1, updated_at = $4
+WHERE id = $1;
+
 -- name: ListAccounts :many
 SELECT * FROM accounts ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 

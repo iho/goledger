@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"time"
 
@@ -73,6 +74,9 @@ type CreateTransferInput struct {
 	FromAccountID string
 	ToAccountID   string
 	Amount        decimal.Decimal
+	// ReversedTransferID, when set, marks this transfer as a reversal of the
+	// referenced transfer. Leave nil for ordinary transfers.
+	ReversedTransferID *string
 }
 
 // CreateBatchTransferInput represents input for creating multiple transfers atomically.
@@ -125,9 +129,10 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 
 	// Execute with retry for deadlock/serialization errors
 	var transfers []*domain.Transfer
+	var currencies []string
 	err := uc.retrier.Retry(ctx, func() error {
 		var txErr error
-		transfers, txErr = uc.executeTransferTransaction(ctx, input, accountIDs)
+		transfers, currencies, txErr = uc.executeTransferTransaction(ctx, input, accountIDs)
 		return txErr
 	})
 
@@ -139,9 +144,9 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 			uc.metrics.TransferErrors.WithLabelValues("create_failed").Inc()
 		} else {
 			uc.metrics.TransfersCreated.Add(float64(len(transfers)))
-			for _, t := range transfers {
+			for i, t := range transfers {
 				val, _ := t.Amount.Float64()
-				uc.metrics.TransferAmount.Observe(val)
+				uc.metrics.TransferAmount.WithLabelValues(currencies[i]).Observe(val)
 			}
 		}
 	}
@@ -149,12 +154,15 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	return transfers, err
 }
 
-// executeTransferTransaction runs the transfer in a single transaction.
+// executeTransferTransaction runs the transfer in a single transaction. It
+// returns the created transfers alongside their account currency (same
+// order), for currency-labeled metrics; the currency isn't stored on
+// domain.Transfer itself.
 func (uc *TransferUseCase) executeTransferTransaction(
 	ctx context.Context,
 	input CreateBatchTransferInput,
 	accountIDs []string,
-) ([]*domain.Transfer, error) {
+) ([]*domain.Transfer, []string, error) {
 	// Add transaction timeout to prevent long-running transactions
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
 	defer cancel()
@@ -162,18 +170,18 @@ func (uc *TransferUseCase) executeTransferTransaction(
 	// Begin transaction
 	tx, err := uc.txManager.Begin(txCtx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { _ = tx.Rollback(txCtx) }()
 
 	// 3. Lock accounts in sorted order
 	accounts, err := uc.accountRepo.GetByIDsForUpdate(txCtx, tx, accountIDs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(accounts) != len(accountIDs) {
-		return nil, domain.ErrAccountNotFound
+		return nil, nil, domain.ErrAccountNotFound
 	}
 
 	accountMap := uc.buildAccountMap(accounts)
@@ -187,6 +195,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 	}
 
 	transfers := make([]*domain.Transfer, 0, len(input.Transfers))
+	currencies := make([]string, 0, len(input.Transfers))
 	for _, ti := range input.Transfers {
 		metadata := input.Metadata
 		if ti.Metadata != nil {
@@ -195,8 +204,10 @@ func (uc *TransferUseCase) executeTransferTransaction(
 
 		transfer, err := uc.processTransfer(txCtx, tx, accountMap, ti, now, eventAt, metadata)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+
+		currencies = append(currencies, accountMap[ti.FromAccountID].Currency)
 
 		transfers = append(transfers, transfer)
 	}
@@ -209,28 +220,33 @@ func (uc *TransferUseCase) executeTransferTransaction(
 		}
 
 		for _, t := range transfers {
+			action := domain.AuditActionTransferCreate
+			if t.ReversedTransferID != nil {
+				action = domain.AuditActionTransferReverse
+			}
+
 			auditLog := &domain.AuditLog{
 				ID:           uc.idGen.Generate(),
 				UserID:       userID,
-				Action:       string(domain.AuditActionTransferCreate),
+				Action:       string(action),
 				ResourceType: "transfer",
 				ResourceID:   t.ID,
 				AfterState:   domain.MarshalState(t),
 				Status:       string(domain.AuditStatusSuccess),
-				CreatedAt:    time.Now(),
+				CreatedAt:    time.Now().UTC(),
 			}
 			if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
 
 	// 5. Commit transaction
 	if err := tx.Commit(txCtx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return transfers, nil
+	return transfers, currencies, nil
 }
 
 func (uc *TransferUseCase) processTransfer(
@@ -267,13 +283,14 @@ func (uc *TransferUseCase) processTransfer(
 
 	// Create transfer
 	transfer := &domain.Transfer{
-		ID:            uc.idGen.Generate(),
-		FromAccountID: input.FromAccountID,
-		ToAccountID:   input.ToAccountID,
-		Amount:        input.Amount,
-		CreatedAt:     now,
-		EventAt:       eventAt,
-		Metadata:      metadata,
+		ID:                 uc.idGen.Generate(),
+		FromAccountID:      input.FromAccountID,
+		ToAccountID:        input.ToAccountID,
+		Amount:             input.Amount,
+		CreatedAt:          now,
+		EventAt:            eventAt,
+		Metadata:           metadata,
+		ReversedTransferID: input.ReversedTransferID,
 	}
 
 	err = transfer.Validate()
@@ -340,22 +357,34 @@ func (uc *TransferUseCase) processTransfer(
 	toAccount.Balance = toNewBalance
 	toAccount.Version++
 
-	// Emit transfer created event
+	// Emit transfer created/reversed event
 	event := &domain.OutboxEvent{
 		ID:            uc.idGen.Generate(),
 		AggregateID:   transfer.ID,
 		AggregateType: domain.AggregateTypeTransfer,
-		EventType:     domain.EventTypeTransferCreated,
-		Payload: map[string]any{
+		CreatedAt:     now,
+		Published:     false,
+	}
+
+	if transfer.ReversedTransferID != nil {
+		event.EventType = domain.EventTypeTransferReversed
+		event.Payload = map[string]any{
+			"reversal_transfer_id": transfer.ID,
+			"original_transfer_id": *transfer.ReversedTransferID,
+			"amount":               transfer.Amount.String(),
+			"event_at":             transfer.EventAt.Format(time.RFC3339),
+		}
+	} else {
+		event.EventType = domain.EventTypeTransferCreated
+		event.Payload = map[string]any{
 			"transfer_id":     transfer.ID,
 			"from_account_id": transfer.FromAccountID,
 			"to_account_id":   transfer.ToAccountID,
 			"amount":          transfer.Amount.String(),
 			"event_at":        transfer.EventAt.Format(time.RFC3339),
-		},
-		CreatedAt: now,
-		Published: false,
+		}
 	}
+
 	if err := uc.outboxRepo.Create(ctx, tx, event); err != nil {
 		return nil, err
 	}
@@ -423,197 +452,41 @@ type ReverseTransferInput struct {
 }
 
 // ReverseTransfer creates a reversal transfer that offsets an original transfer.
+//
+// It delegates to CreateBatchTransfer so the reversal gets the same
+// deadlock-safe sorted account locking, outbox event, and audit logging as
+// an ordinary transfer. Double-reversal is prevented by a unique partial
+// index on transfers.reversed_transfer_id (see migration 000007); a
+// violation is translated to domain.ErrTransferAlreadyReversed by the
+// transfer repository.
 func (uc *TransferUseCase) ReverseTransfer(ctx context.Context, input ReverseTransferInput) (*domain.Transfer, error) {
-	// Fetch the original transfer
 	originalTransfer, err := uc.transferRepo.GetByID(ctx, input.TransferID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if the transfer has already been reversed
-	if originalTransfer.ReversedTransferID != nil {
-		return nil, domain.ErrTransferAlreadyReversed
-	}
+	metadata := make(map[string]any, len(input.Metadata)+1)
+	maps.Copy(metadata, input.Metadata)
+	metadata["reversal_of"] = originalTransfer.ID
 
-	// Create reversal transfer with swapped accounts
-	now := time.Now()
-	reversalInput := CreateTransferInput{
-		FromAccountID: originalTransfer.ToAccountID,   // Swap
-		ToAccountID:   originalTransfer.FromAccountID, // Swap
-		Amount:        originalTransfer.Amount,
-		EventAt:       &now,
-		Metadata:      input.Metadata,
-	}
+	now := time.Now().UTC()
+	reversedTransferID := originalTransfer.ID
 
-	var reversalTransfer *domain.Transfer
-	err = uc.retrier.Retry(ctx, func() error {
-		// Add transaction timeout
-		txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
-		defer cancel()
-
-		tx, txErr := uc.txManager.Begin(txCtx)
-		if txErr != nil {
-			return txErr
-		}
-		defer func() { _ = tx.Rollback(txCtx) }()
-
-		reversalTransfer, txErr = uc.executeReverseTransfer(txCtx, tx, reversalInput, originalTransfer.ID)
-		if txErr != nil {
-			return txErr
-		}
-
-		return tx.Commit(txCtx)
+	result, err := uc.CreateBatchTransfer(ctx, CreateBatchTransferInput{
+		EventAt: &now,
+		Transfers: []CreateTransferInput{
+			{
+				FromAccountID:      originalTransfer.ToAccountID,   // Swap
+				ToAccountID:        originalTransfer.FromAccountID, // Swap
+				Amount:             originalTransfer.Amount,
+				Metadata:           metadata,
+				ReversedTransferID: &reversedTransferID,
+			},
+		},
 	})
-
-	return reversalTransfer, err
-}
-
-func (uc *TransferUseCase) executeReverseTransfer(
-	ctx context.Context,
-	tx Transaction,
-	input CreateTransferInput,
-	originalTransferID string,
-) (*domain.Transfer, error) {
-	now := time.Now()
-	eventAt := now
-	if input.EventAt != nil && !input.EventAt.IsZero() {
-		eventAt = *input.EventAt
-	}
-
-	metadata := input.Metadata
-	if metadata == nil {
-		metadata = make(map[string]any)
-	}
-	metadata["reversal_of"] = originalTransferID
-
-	// Lock accounts in sorted order to prevent deadlocks
-	accountIDs := []string{input.FromAccountID, input.ToAccountID}
-	sort.Strings(accountIDs)
-
-	// Fetch and lock accounts
-	fromAccount, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, input.FromAccountID)
 	if err != nil {
 		return nil, err
 	}
 
-	toAccount, err := uc.accountRepo.GetByIDForUpdate(ctx, tx, input.ToAccountID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate currency match
-	if fromAccount.Currency != toAccount.Currency {
-		return nil, domain.ErrCurrencyMismatch
-	}
-
-	// Validate balances
-	err = fromAccount.ValidateDebit(input.Amount)
-	if err != nil {
-		return nil, err
-	}
-
-	err = toAccount.ValidateCredit(input.Amount)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create reversal transfer
-	reversalTransfer := &domain.Transfer{
-		ID:                 uc.idGen.Generate(),
-		FromAccountID:      input.FromAccountID,
-		ToAccountID:        input.ToAccountID,
-		Amount:             input.Amount,
-		CreatedAt:          now,
-		EventAt:            eventAt,
-		Metadata:           metadata,
-		ReversedTransferID: &originalTransferID,
-	}
-
-	err = reversalTransfer.Validate()
-	if err != nil {
-		return nil, err
-	}
-
-	err = uc.transferRepo.Create(ctx, tx, reversalTransfer)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create debit entry (from account)
-	fromNewBalance := fromAccount.ApplyDebit(input.Amount)
-	fromEntry := &domain.Entry{
-		ID:                     uc.idGen.Generate(),
-		AccountID:              fromAccount.ID,
-		TransferID:             reversalTransfer.ID,
-		Amount:                 input.Amount.Neg(),
-		AccountPreviousBalance: fromAccount.Balance,
-		AccountCurrentBalance:  fromNewBalance,
-		AccountVersion:         fromAccount.Version + 1,
-		CreatedAt:              now,
-	}
-
-	err = uc.entryRepo.Create(ctx, tx, fromEntry)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update from account balance
-	err = uc.accountRepo.UpdateBalance(ctx, tx, fromAccount.ID, fromNewBalance, now)
-	if err != nil {
-		return nil, err
-	}
-
-	fromAccount.Balance = fromNewBalance
-	fromAccount.Version++
-
-	// Create credit entry (to account)
-	toNewBalance := toAccount.ApplyCredit(input.Amount)
-	toEntry := &domain.Entry{
-		ID:                     uc.idGen.Generate(),
-		AccountID:              toAccount.ID,
-		TransferID:             reversalTransfer.ID,
-		Amount:                 input.Amount,
-		AccountPreviousBalance: toAccount.Balance,
-		AccountCurrentBalance:  toNewBalance,
-		AccountVersion:         toAccount.Version + 1,
-		CreatedAt:              now,
-	}
-
-	err = uc.entryRepo.Create(ctx, tx, toEntry)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update to account balance
-	err = uc.accountRepo.UpdateBalance(ctx, tx, toAccount.ID, toNewBalance, now)
-	if err != nil {
-		return nil, err
-	}
-
-	toAccount.Balance = toNewBalance
-	toAccount.Version++
-
-	// Audit logging
-	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
-
-		auditLog := &domain.AuditLog{
-			ID:           uc.idGen.Generate(),
-			UserID:       userID,
-			Action:       string(domain.AuditActionTransferReverse),
-			ResourceType: "transfer",
-			ResourceID:   reversalTransfer.ID,
-			AfterState:   domain.MarshalState(reversalTransfer),
-			Status:       string(domain.AuditStatusSuccess),
-			CreatedAt:    time.Now(),
-		}
-		if err := uc.auditRepo.CreateTx(ctx, tx, auditLog); err != nil {
-			return nil, err
-		}
-	}
-
-	return reversalTransfer, nil
+	return result[0], nil
 }

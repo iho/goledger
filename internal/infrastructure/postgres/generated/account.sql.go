@@ -204,6 +204,29 @@ func (q *Queries) UpdateAccountBalance(ctx context.Context, arg UpdateAccountBal
 	return err
 }
 
+const updateAccountBalanceAndEncumbered = `-- name: UpdateAccountBalanceAndEncumbered :exec
+UPDATE accounts
+SET balance = $2, encumbered_balance = $3, version = version + 1, updated_at = $4
+WHERE id = $1
+`
+
+type UpdateAccountBalanceAndEncumberedParams struct {
+	ID                string             `json:"id"`
+	Balance           pgtype.Numeric     `json:"balance"`
+	EncumberedBalance pgtype.Numeric     `json:"encumbered_balance"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAccountBalanceAndEncumbered(ctx context.Context, arg UpdateAccountBalanceAndEncumberedParams) error {
+	_, err := q.db.Exec(ctx, updateAccountBalanceAndEncumbered,
+		arg.ID,
+		arg.Balance,
+		arg.EncumberedBalance,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const updateAccountEncumbered = `-- name: UpdateAccountEncumbered :exec
 UPDATE accounts
 SET encumbered_balance = $2, version = version + 1, updated_at = $3

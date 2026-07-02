@@ -18,6 +18,11 @@ type AccountRepository interface {
 	GetByIDsForUpdate(ctx context.Context, tx Transaction, ids []string) ([]*domain.Account, error)
 	UpdateBalance(ctx context.Context, tx Transaction, id string, balance decimal.Decimal, updatedAt time.Time) error
 	UpdateEncumberedBalance(ctx context.Context, tx Transaction, id string, encumberedBalance decimal.Decimal, updatedAt time.Time) error
+	// UpdateBalanceAndEncumbered updates both columns atomically in one
+	// statement. Use this instead of UpdateBalance+UpdateEncumberedBalance
+	// whenever both change together, so the row never has an intermediate
+	// state that violates the accounts balance CHECK constraints.
+	UpdateBalanceAndEncumbered(ctx context.Context, tx Transaction, id string, balance, encumberedBalance decimal.Decimal, updatedAt time.Time) error
 	List(ctx context.Context, limit, offset int) ([]*domain.Account, error)
 }
 

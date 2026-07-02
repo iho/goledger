@@ -37,6 +37,9 @@ func (s *stubAccountRepository) UpdateBalance(context.Context, usecase.Transacti
 func (s *stubAccountRepository) UpdateEncumberedBalance(context.Context, usecase.Transaction, string, decimal.Decimal, time.Time) error {
 	return errors.New("not implemented")
 }
+func (s *stubAccountRepository) UpdateBalanceAndEncumbered(context.Context, usecase.Transaction, string, decimal.Decimal, decimal.Decimal, time.Time) error {
+	return errors.New("not implemented")
+}
 func (s *stubAccountRepository) List(ctx context.Context, limit, offset int) ([]*domain.Account, error) {
 	return s.listFn(ctx, limit, offset)
 }

@@ -129,6 +129,24 @@ func (r *AccountRepository) UpdateEncumberedBalance(ctx context.Context, tx usec
 	})
 }
 
+// UpdateBalanceAndEncumbered updates both the balance and encumbered balance
+// of an account in a single statement. This must be used (instead of two
+// separate UpdateBalance/UpdateEncumberedBalance calls) whenever both
+// columns change together, so the row never has an intermediate state that
+// violates the balance CHECK constraints (which are evaluated per statement,
+// not deferred until commit).
+func (r *AccountRepository) UpdateBalanceAndEncumbered(ctx context.Context, tx usecase.Transaction, id string, balance, encumberedBalance decimal.Decimal, updatedAt time.Time) error {
+	pgxTx := tx.(*Tx).PgxTx()
+	queries := generated.New(pgxTx)
+
+	return queries.UpdateAccountBalanceAndEncumbered(ctx, generated.UpdateAccountBalanceAndEncumberedParams{
+		ID:                id,
+		Balance:           decimalToNumeric(balance),
+		EncumberedBalance: decimalToNumeric(encumberedBalance),
+		UpdatedAt:         timeToPgTimestamptz(updatedAt),
+	})
+}
+
 // List lists accounts with pagination.
 func (r *AccountRepository) List(ctx context.Context, limit, offset int) ([]*domain.Account, error) {
 	rows, err := r.queries.ListAccounts(ctx, generated.ListAccountsParams{

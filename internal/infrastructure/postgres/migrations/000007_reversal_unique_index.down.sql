@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_transfers_reversed_transfer_id;
+CREATE INDEX idx_transfers_reversed_transfer_id ON transfers(reversed_transfer_id);

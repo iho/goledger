@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/caarlos0/env/v10"
@@ -37,13 +39,43 @@ type Config struct {
 	AuthEnabled   bool          `env:"AUTH_ENABLED"     envDefault:"false"`
 }
 
-// Load loads configuration from environment variables.
+// Load loads configuration from environment variables and validates it.
 func Load() (*Config, error) {
 	cfg := &Config{}
-	err := env.Parse(cfg)
-	if err != nil {
+	if err := env.Parse(cfg); err != nil {
+		return nil, err
+	}
+
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// Validate checks the loaded configuration for values that would otherwise
+// fail confusingly (or silently misbehave) at runtime rather than at
+// startup.
+func (c *Config) Validate() error {
+	if c.AuthEnabled && c.JWTSecret == "" {
+		return fmt.Errorf("JWT_SECRET must be set when AUTH_ENABLED is true")
+	}
+
+	if _, err := strconv.ParseUint(c.HTTPPort, 10, 16); err != nil {
+		return fmt.Errorf("HTTP_PORT must be a valid port number: %w", err)
+	}
+
+	if c.DatabaseMaxConns <= 0 {
+		return fmt.Errorf("DATABASE_MAX_CONNS must be positive, got %d", c.DatabaseMaxConns)
+	}
+
+	if c.DatabaseMinConns < 0 {
+		return fmt.Errorf("DATABASE_MIN_CONNS must not be negative, got %d", c.DatabaseMinConns)
+	}
+
+	if c.DatabaseMinConns > c.DatabaseMaxConns {
+		return fmt.Errorf("DATABASE_MIN_CONNS (%d) must not exceed DATABASE_MAX_CONNS (%d)", c.DatabaseMinConns, c.DatabaseMaxConns)
+	}
+
+	return nil
 }

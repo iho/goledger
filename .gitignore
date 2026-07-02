@@ -33,7 +33,4 @@ go.work.sum
 
 # Binary output
 bin/
-*.md
-*.sql
 ./server
-bin/*

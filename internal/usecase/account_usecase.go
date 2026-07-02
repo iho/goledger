@@ -99,7 +99,7 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 			ResourceID:   account.ID,
 			AfterState:   domain.MarshalState(account),
 			Status:       string(domain.AuditStatusSuccess),
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().UTC(),
 		}
 		if err := uc.auditRepo.CreateTx(txCtx, tx, auditLog); err != nil {
 			return nil, err

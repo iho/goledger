@@ -146,6 +146,20 @@ func (mr *MockAccountRepositoryMockRecorder) UpdateBalance(ctx, tx, id, balance,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBalance", reflect.TypeOf((*MockAccountRepository)(nil).UpdateBalance), ctx, tx, id, balance, updatedAt)
 }
 
+// UpdateBalanceAndEncumbered mocks base method.
+func (m *MockAccountRepository) UpdateBalanceAndEncumbered(ctx context.Context, tx usecase.Transaction, id string, balance, encumberedBalance decimal.Decimal, updatedAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBalanceAndEncumbered", ctx, tx, id, balance, encumberedBalance, updatedAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateBalanceAndEncumbered indicates an expected call of UpdateBalanceAndEncumbered.
+func (mr *MockAccountRepositoryMockRecorder) UpdateBalanceAndEncumbered(ctx, tx, id, balance, encumberedBalance, updatedAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBalanceAndEncumbered", reflect.TypeOf((*MockAccountRepository)(nil).UpdateBalanceAndEncumbered), ctx, tx, id, balance, encumberedBalance, updatedAt)
+}
+
 // UpdateEncumberedBalance mocks base method.
 func (m *MockAccountRepository) UpdateEncumberedBalance(ctx context.Context, tx usecase.Transaction, id string, encumberedBalance decimal.Decimal, updatedAt time.Time) error {
 	m.ctrl.T.Helper()

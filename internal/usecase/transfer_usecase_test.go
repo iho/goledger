@@ -443,11 +443,14 @@ func newTestMetrics() *metrics.Metrics {
 			Help:    "test histogram",
 			Buckets: prometheus.DefBuckets,
 		}),
-		TransferAmount: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name:    "test_transfer_amount",
-			Help:    "test histogram",
-			Buckets: prometheus.DefBuckets,
-		}),
+		TransferAmount: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "test_transfer_amount",
+				Help:    "test histogram",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"currency"},
+		),
 		TransferErrors: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "test_transfer_errors_total",

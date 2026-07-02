@@ -11,7 +11,7 @@ type Metrics struct {
 	TransfersCreated  prometheus.Counter
 	TransfersReversed prometheus.Counter
 	TransferDuration  prometheus.Histogram
-	TransferAmount    prometheus.Histogram
+	TransferAmount    *prometheus.HistogramVec
 	TransferErrors    *prometheus.CounterVec
 
 	// Account metrics
@@ -71,11 +71,14 @@ func New() *Metrics {
 			Help:    "Duration of transfer operations",
 			Buckets: prometheus.DefBuckets,
 		}),
-		TransferAmount: promauto.NewHistogram(prometheus.HistogramOpts{
-			Name:    "goledger_transfer_amount",
-			Help:    "Transfer amounts",
-			Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
-		}),
+		TransferAmount: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "goledger_transfer_amount",
+				Help:    "Transfer amounts by currency",
+				Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+			},
+			[]string{"currency"},
+		),
 		TransferErrors: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "goledger_transfer_errors_total",

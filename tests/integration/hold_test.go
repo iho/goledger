@@ -135,4 +135,53 @@ func TestHoldLifecycle(t *testing.T) {
 			t.Errorf("expected ErrNegativeBalanceNotAllowed, got %v", err)
 		}
 	})
+
+	// Capturing one hold while another hold on the same account is still
+	// active momentarily drives balance below encumbered_balance if the
+	// two columns aren't updated atomically. This guards against
+	// regressing to two separate UpdateBalance/UpdateEncumberedBalance
+	// calls, which would violate the accounts CHECK constraints added in
+	// migration 000008 whenever balance doesn't allow negative available
+	// balance.
+	t.Run("capture with another concurrent hold active does not violate balance invariants", func(t *testing.T) {
+		testDB.TruncateAll(ctx)
+
+		source := testDB.CreateTestAccountWithBalance(ctx, "source", "USD", decimal.NewFromInt(100), false, true)
+		dest := testDB.CreateTestAccount(ctx, "dest", "USD", false, true)
+
+		holdA, err := holdUC.HoldFunds(ctx, source.ID, decimal.NewFromInt(50))
+		if err != nil {
+			t.Fatalf("failed to create hold A: %v", err)
+		}
+
+		holdB, err := holdUC.HoldFunds(ctx, source.ID, decimal.NewFromInt(40))
+		if err != nil {
+			t.Fatalf("failed to create hold B: %v", err)
+		}
+
+		// Available balance is now 100 - 90 = 10. Capturing hold A must
+		// succeed without the intermediate state (balance -50, encumbered
+		// still 90) violating the available-balance CHECK.
+		if _, err := holdUC.CaptureHold(ctx, holdA.ID, dest.ID); err != nil {
+			t.Fatalf("failed to capture hold A while hold B is still active: %v", err)
+		}
+
+		sourceAcc, err := accountRepo.GetByID(ctx, source.ID)
+		if err != nil {
+			t.Fatalf("failed to get source account: %v", err)
+		}
+		if !sourceAcc.Balance.Equal(decimal.NewFromInt(50)) {
+			t.Errorf("expected balance 50, got %s", sourceAcc.Balance)
+		}
+		if !sourceAcc.EncumberedBalance.Equal(decimal.NewFromInt(40)) {
+			t.Errorf("expected encumbered 40 (hold B still active), got %s", sourceAcc.EncumberedBalance)
+		}
+		if !sourceAcc.AvailableBalance().Equal(decimal.NewFromInt(10)) {
+			t.Errorf("expected available 10, got %s", sourceAcc.AvailableBalance())
+		}
+
+		if err := holdUC.VoidHold(ctx, holdB.ID); err != nil {
+			t.Fatalf("failed to void hold B: %v", err)
+		}
+	})
 }

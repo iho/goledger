@@ -106,7 +106,7 @@ func (ep *EventPublisher) processEvents(ctx context.Context) error {
 		}
 
 		// Mark as published
-		if err := ep.outboxRepo.MarkPublished(ctx, event.ID, time.Now()); err != nil {
+		if err := ep.outboxRepo.MarkPublished(ctx, event.ID, time.Now().UTC()); err != nil {
 			ep.logger.Error("failed to mark event as published",
 				slog.String("event_id", event.ID),
 				slog.String("error", err.Error()))

@@ -75,3 +75,46 @@ func TestLoadInvalidDuration(t *testing.T) {
 		t.Fatalf("expected error for invalid duration")
 	}
 }
+
+func TestLoadAuthEnabledWithoutSecret(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("JWT_SECRET", "")
+
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("expected error when AUTH_ENABLED is true and JWT_SECRET is empty")
+	}
+}
+
+func TestLoadAuthEnabledWithSecret(t *testing.T) {
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("JWT_SECRET", "top-secret")
+
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadInvalidHTTPPort(t *testing.T) {
+	t.Setenv("HTTP_PORT", "not-a-port")
+
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("expected error for invalid HTTP_PORT")
+	}
+}
+
+func TestLoadDatabaseMinConnsExceedsMaxConns(t *testing.T) {
+	t.Setenv("DATABASE_MIN_CONNS", "50")
+	t.Setenv("DATABASE_MAX_CONNS", "25")
+
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("expected error when DATABASE_MIN_CONNS exceeds DATABASE_MAX_CONNS")
+	}
+}
+
+func TestLoadDatabaseMaxConnsNotPositive(t *testing.T) {
+	t.Setenv("DATABASE_MAX_CONNS", "0")
+
+	if _, err := config.Load(); err == nil {
+		t.Fatalf("expected error when DATABASE_MAX_CONNS is not positive")
+	}
+}

@@ -2,11 +2,14 @@ package integration
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/adapter/repository/postgres"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/usecase"
 	"github.com/iho/goledger/tests/testutil"
 )
@@ -173,6 +176,105 @@ func TestReverseTransferTwice(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when reversing transfer twice, got nil")
 	}
+}
+
+// TestReverseTransferConcurrentDoubleReversal fires many concurrent
+// ReverseTransfer calls for the same original transfer and asserts that
+// exactly one succeeds. Accounts allow negative/positive balances so that
+// a balance-check side effect can't accidentally mask a broken
+// already-reversed check (see migration 000007's unique partial index).
+func TestReverseTransferConcurrentDoubleReversal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := context.Background()
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Cleanup()
+
+	pool := testDB.Pool
+	transferRepo := postgres.NewTransferRepository(pool)
+	entryRepo := postgres.NewEntryRepository(pool)
+	accountRepo := postgres.NewAccountRepository(pool)
+	txManager := postgres.NewTxManager(pool)
+	idGen := postgres.NewULIDGenerator()
+	retrier := postgres.NewRetrier()
+
+	outboxRepo := postgres.NewNullOutboxRepository()
+	transferUC := usecase.NewTransferUseCase(txManager, accountRepo, transferRepo, entryRepo, outboxRepo, nil, idGen, nil).WithRetrier(retrier)
+
+	acc1 := testDB.CreateTestAccountWithBalance(ctx, "acc1", "USD", decimal.NewFromInt(1000), true, true)
+	acc2 := testDB.CreateTestAccount(ctx, "acc2", "USD", true, true)
+
+	originalTransfer, err := transferUC.CreateTransfer(ctx, usecase.CreateTransferInput{
+		FromAccountID: acc1.ID,
+		ToAccountID:   acc2.ID,
+		Amount:        decimal.NewFromInt(500),
+	})
+	if err != nil {
+		t.Fatalf("failed to create transfer: %v", err)
+	}
+
+	const attempts = 10
+
+	var (
+		wg         sync.WaitGroup
+		mu         sync.Mutex
+		successes  int
+		otherError error
+	)
+
+	for range attempts {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			_, err := transferUC.ReverseTransfer(ctx, usecase.ReverseTransferInput{
+				TransferID: originalTransfer.ID,
+			})
+
+			mu.Lock()
+			defer mu.Unlock()
+
+			switch {
+			case err == nil:
+				successes++
+			case !isTransferAlreadyReversed(err):
+				otherError = err
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if otherError != nil {
+		t.Fatalf("unexpected error from concurrent reversal: %v", otherError)
+	}
+
+	if successes != 1 {
+		t.Errorf("expected exactly 1 successful reversal out of %d concurrent attempts, got %d", attempts, successes)
+	}
+
+	acc1After, err := accountRepo.GetByID(ctx, acc1.ID)
+	if err != nil {
+		t.Fatalf("failed to get account 1 after reversal: %v", err)
+	}
+	if !acc1After.Balance.Equal(decimal.NewFromInt(1000)) {
+		t.Errorf("expected account 1 balance 1000 after single reversal, got %s", acc1After.Balance)
+	}
+
+	acc2After, err := accountRepo.GetByID(ctx, acc2.ID)
+	if err != nil {
+		t.Fatalf("failed to get account 2 after reversal: %v", err)
+	}
+	if !acc2After.Balance.Equal(decimal.Zero) {
+		t.Errorf("expected account 2 balance 0 after single reversal, got %s", acc2After.Balance)
+	}
+}
+
+func isTransferAlreadyReversed(err error) bool {
+	return err != nil && errors.Is(err, domain.ErrTransferAlreadyReversed)
 }
 
 func TestReverseTransferInsufficientBalance(t *testing.T) {
