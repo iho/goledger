@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LoggingMiddleware logs HTTP requests.
@@ -24,13 +26,21 @@ func (m *LoggingMiddleware) Wrap(next http.Handler) http.Handler {
 		wrapped := &statusRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
 
-		m.logger.Info("request completed",
+		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", wrapped.statusCode,
 			"duration", time.Since(start),
 			"remote_addr", r.RemoteAddr,
-		)
+		}
+
+		// Correlate with the trace started by otelhttp (see cmd/server/main.go),
+		// so a log line can be matched to its span in the tracing backend.
+		if sc := trace.SpanContextFromContext(r.Context()); sc.IsValid() {
+			attrs = append(attrs, "trace_id", sc.TraceID().String())
+		}
+
+		m.logger.Info("request completed", attrs...)
 	})
 }
 

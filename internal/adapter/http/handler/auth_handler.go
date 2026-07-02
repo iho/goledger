@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/auth"
@@ -14,6 +15,8 @@ import (
 type AuthHandler struct {
 	jwtManager *auth.JWTManager
 	userUC     UserAuthenticator
+	auditRepo  usecase.AuditRepository
+	idGen      usecase.IDGenerator
 }
 
 // UserAuthenticator interface for user authentication
@@ -27,6 +30,46 @@ func NewAuthHandler(jwtManager *auth.JWTManager, userUC UserAuthenticator) *Auth
 		jwtManager: jwtManager,
 		userUC:     userUC,
 	}
+}
+
+// WithAudit attaches an audit repository and ID generator so login attempts
+// (success and failure) are recorded to the audit trail.
+func (h *AuthHandler) WithAudit(auditRepo usecase.AuditRepository, idGen usecase.IDGenerator) *AuthHandler {
+	h.auditRepo = auditRepo
+	h.idGen = idGen
+	return h
+}
+
+// auditLogin records a login attempt. Best-effort: audit failures never
+// block the login response.
+func (h *AuthHandler) auditLogin(r *http.Request, email, userID string, status domain.AuditStatus, errMsg string) {
+	if h.auditRepo == nil || h.idGen == nil {
+		return
+	}
+
+	resourceID := userID
+	if resourceID == "" {
+		resourceID = email
+	}
+
+	log := &domain.AuditLog{
+		ID:           h.idGen.Generate(),
+		UserID:       resourceID,
+		Action:       string(domain.AuditActionUserLogin),
+		ResourceType: "user",
+		ResourceID:   resourceID,
+		IPAddress:    r.RemoteAddr,
+		UserAgent:    r.UserAgent(),
+		Status:       string(status),
+		ErrorMessage: errMsg,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	if meta, ok := domain.RequestMetaFromContext(r.Context()); ok {
+		log.RequestID = meta.RequestID
+	}
+
+	_ = h.auditRepo.Create(r.Context(), log)
 }
 
 // LoginRequest represents a login request
@@ -57,11 +100,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Authenticate user using UserUseCase
-	user, err := h.userUC.Authenticate(context.Background(), usecase.AuthenticateInput{
+	user, err := h.userUC.Authenticate(r.Context(), usecase.AuthenticateInput{
 		Email:    req.Email,
 		Password: req.Password,
 	})
 	if err != nil {
+		h.auditLogin(r, req.Email, "", domain.AuditStatusFailure, err.Error())
 		writeError(w, http.StatusUnauthorized, "invalid credentials", "")
 		return
 	}
@@ -72,6 +116,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to generate token", err.Error())
 		return
 	}
+
+	h.auditLogin(r, req.Email, user.ID, domain.AuditStatusSuccess, "")
 
 	// Return token and user info
 	response := LoginResponse{
@@ -88,7 +134,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // GetCurrentUser returns the current authenticated user
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value("user").(*domain.User)
+	user, ok := domain.UserFromContext(r.Context())
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "")
 		return

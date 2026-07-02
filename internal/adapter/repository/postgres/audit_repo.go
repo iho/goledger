@@ -81,7 +81,8 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 	query := `
 		SELECT id, user_id, action, resource_type, resource_id,
 		       ip_address, user_agent, request_id,
-		       before_state, after_state, status, error_message, created_at
+		       before_state, after_state, status, error_message, created_at,
+		       prev_hash, hash, chain_seq
 		FROM audit_logs
 		WHERE 1=1
 	`
@@ -112,6 +113,18 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 		argPos++
 	}
 
+	if filter.StartDate != nil {
+		query += fmt.Sprintf(" AND created_at >= $%d", argPos)
+		args = append(args, *filter.StartDate)
+		argPos++
+	}
+
+	if filter.EndDate != nil {
+		query += fmt.Sprintf(" AND created_at <= $%d", argPos)
+		args = append(args, *filter.EndDate)
+		argPos++
+	}
+
 	query += ` ORDER BY created_at DESC`
 
 	if filter.Limit > 0 {
@@ -139,7 +152,8 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 		var beforeStateJSON, afterStateJSON []byte
 		var createdAt pgtype.Timestamptz
 
-		var ipAddress, userAgent, requestID, errorMessage *string
+		var ipAddress, userAgent, requestID, errorMessage, prevHash, hash *string
+		var chainSeq *int64
 
 		err := rows.Scan(
 			&log.ID,
@@ -155,6 +169,9 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 			&log.Status,
 			&errorMessage,
 			&createdAt,
+			&prevHash,
+			&hash,
+			&chainSeq,
 		)
 		if err != nil {
 			return nil, err
@@ -172,6 +189,15 @@ func (r *AuditRepository) List(ctx context.Context, filter domain.AuditFilter) (
 		}
 		if errorMessage != nil {
 			log.ErrorMessage = *errorMessage
+		}
+		if prevHash != nil {
+			log.PrevHash = *prevHash
+		}
+		if hash != nil {
+			log.Hash = *hash
+		}
+		if chainSeq != nil {
+			log.ChainSeq = *chainSeq
 		}
 
 		if beforeStateJSON != nil {
@@ -222,6 +248,15 @@ func (r *AuditRepository) GetByResourceID(ctx context.Context, resourceType, res
 		}
 		if log.ErrorMessage != nil {
 			result[i].ErrorMessage = *log.ErrorMessage
+		}
+		if log.PrevHash != nil {
+			result[i].PrevHash = *log.PrevHash
+		}
+		if log.Hash != nil {
+			result[i].Hash = *log.Hash
+		}
+		if log.ChainSeq != nil {
+			result[i].ChainSeq = *log.ChainSeq
 		}
 
 		if log.BeforeState != nil {

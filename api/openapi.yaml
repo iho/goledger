@@ -22,8 +22,14 @@ tags:
     description: Account management operations
   - name: Transfers
     description: Transfer operations between accounts
+  - name: Entries
+    description: Ledger entries (the append-only debit/credit rows behind every transfer)
   - name: Holds
     description: Hold management (reserve funds)
+  - name: Ledger
+    description: Ledger-wide consistency checks
+  - name: Audit
+    description: Admin-only audit trail reads for examiners
   - name: Health
     description: System health and readiness checks
 
@@ -164,6 +170,114 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /accounts/{id}/entries:
+    get:
+      tags: [Entries]
+      summary: List entries for an account
+      operationId: listEntriesByAccount
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entry'
+
+  /accounts/{id}/transfers:
+    get:
+      tags: [Transfers]
+      summary: List transfers for an account
+      description: >
+        Pass `cursor` (the ID of the last transfer from the previous page) for
+        keyset pagination - stable under concurrent writes, and the
+        recommended approach. Omit `cursor` entirely to fall back to legacy
+        `offset` pagination.
+      operationId: listTransfersByAccount
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: cursor
+          in: query
+          description: ID of the last transfer seen; triggers keyset pagination when present (even if empty, to start from the most recent transfer).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of transfers (cursor-paginated shape shown; offset mode returns a bare array)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transfers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transfer'
+                  next_cursor:
+                    type: string
+                    description: Pass as `cursor` to fetch the next page; absent/empty on the last page.
+
+  /accounts/{id}/balance/history:
+    get:
+      tags: [Accounts]
+      summary: Historical balance
+      description: Balance of the account as of a point in time.
+      operationId: getHistoricalBalance
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: at
+          in: query
+          required: true
+          description: RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Balance at the given time
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  account_id:
+                    type: string
+                  at:
+                    type: string
+                    format: date-time
+                  balance:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   # Transfers
   /transfers:
     post:
@@ -195,6 +309,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /transfers/batch:
+    post:
+      tags: [Transfers]
+      summary: Batch transfer
+      description: Create multiple transfers atomically in a single transaction.
+      operationId: createBatchTransfer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transfers]
+              properties:
+                event_at:
+                  type: string
+                  format: date-time
+                metadata:
+                  type: object
+                  additionalProperties: true
+                transfers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CreateTransferRequest'
+      responses:
+        '201':
+          description: Transfers created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '412':
+          description: Precondition failed (insufficient funds, currency mismatch, etc.) - none of the batch is applied
+
   /transfers/{id}:
     get:
       tags: [Transfers]
@@ -218,6 +372,33 @@ paths:
                 $ref: '#/components/schemas/Transfer'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /transfers/{id}/entries:
+    get:
+      tags: [Entries]
+      summary: List entries for a transfer
+      description: The debit and credit entries that make up a transfer (always exactly two, in opposite accounts).
+      operationId: listEntriesByTransfer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entry'
 
   /transfers/{id}/reverse:
     post:
@@ -331,12 +512,212 @@ paths:
         '412':
           description: Hold is not active or has expired
 
-  # Health
+  # Ledger
+  /ledger/consistency:
+    get:
+      tags: [Ledger]
+      summary: Check ledger-wide consistency
+      description: On-demand version of the check the background reconciliation scheduler runs on RECONCILIATION_INTERVAL.
+      operationId: checkLedgerConsistency
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ledger is consistent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: consistent
+                  consistent:
+                    type: boolean
+        '409':
+          description: Ledger is inconsistent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: inconsistent
+                  consistent:
+                    type: boolean
+                  message:
+                    type: string
+
+  # Audit
+  /audit:
+    get:
+      tags: [Audit]
+      summary: List audit logs
+      description: Admin-only. Every mutating action (and login attempts) is recorded here, hash-chained for tamper evidence.
+      operationId: listAuditLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          description: RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          description: RFC3339 timestamp
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /audit/export:
+    get:
+      tags: [Audit]
+      summary: Export audit logs as CSV
+      description: Admin-only. Same filters as GET /audit.
+      operationId: exportAuditLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: resource_id
+          in: query
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /audit/resource/{type}/{id}:
+    get:
+      tags: [Audit]
+      summary: Audit trail for one resource
+      description: Admin-only. e.g. every audited action taken on a single transfer.
+      operationId: getAuditLogsByResource
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+          example: transfer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /audit/user/{userId}:
+    get:
+      tags: [Audit]
+      summary: Audit trail for one user
+      description: Admin-only. Every audited action a single user has taken.
+      operationId: getAuditLogsByUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # Health - these three are NOT under /api/v1 on the real router (see
+  # internal/adapter/http/router.go), hence the servers override on each.
   /health:
+    servers:
+      - url: http://localhost:8080
+        description: Development server (root, not /api/v1)
     get:
       tags: [Health]
-      summary: Health check
-      description: Check if service is healthy
+      summary: Liveness check
+      description: Check if the process is up. Does not check downstream dependencies.
       operationId: healthCheck
       responses:
         '200':
@@ -349,6 +730,46 @@ paths:
                   status:
                     type: string
                     example: healthy
+
+  /ready:
+    servers:
+      - url: http://localhost:8080
+        description: Development server (root, not /api/v1)
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: Checks Postgres and Redis connectivity in addition to liveness.
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready to accept traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: A dependency (Postgres/Redis) is unavailable
+
+  /metrics:
+    servers:
+      - url: http://localhost:8080
+        description: Development server (root, not /api/v1)
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Prometheus text exposition format.
+      operationId: metrics
+      responses:
+        '200':
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
 
 components:
   securitySchemes:
@@ -434,7 +855,13 @@ components:
           default: false
         allow_positive_balance:
           type: boolean
-          default: true
+          default: false
+          description: >
+            Both allow_* flags default to false: a newly created account
+            can neither go negative nor positive until you explicitly opt
+            in, so it can only ever hold a zero balance. Set the flag(s)
+            matching how the account will be used (e.g. allow_positive_balance
+            for a normal wallet that receives funds).
 
     Transfer:
       type: object
@@ -493,9 +920,7 @@ components:
           type: string
           format: date-time
           nullable: true
-        metadata:
-          type: object
-          additionalProperties: true
+          description: Reserved for future use; not currently set by any code path.
         created_at:
           type: string
           format: date-time
@@ -512,12 +937,76 @@ components:
         amount:
           type: string
           pattern: '^\d+(\.\d+)?$'
-        expires_at:
+
+    Entry:
+      type: object
+      description: One side (debit or credit) of a double-entry transfer. Append-only at the database level.
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        transfer_id:
+          type: string
+        amount:
+          type: string
+          description: Signed decimal string - negative for the debit side, positive for the credit side.
+        account_previous_balance:
+          type: string
+        account_current_balance:
+          type: string
+        account_version:
+          type: integer
+          format: int64
+        created_at:
           type: string
           format: date-time
-        metadata:
+
+    AuditLog:
+      type: object
+      description: Append-only, hash-chained (see `./bin/cli audit verify-chain`) audit trail row.
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        action:
+          type: string
+          example: transfer.create
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        request_id:
+          type: string
+        status:
+          type: string
+          enum: [success, failure, error]
+        error_message:
+          type: string
+        before_state:
           type: object
           additionalProperties: true
+        after_state:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        prev_hash:
+          type: string
+          description: SHA-256 hex of the previous row in the chain.
+        hash:
+          type: string
+          description: SHA-256 hex of this row's content.
+        chain_seq:
+          type: integer
+          format: int64
+          description: Authoritative chain ordering, assigned at insert time.
 
     ErrorResponse:
       type: object

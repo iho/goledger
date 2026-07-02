@@ -33,10 +33,25 @@ type Config struct {
 	// Idempotency
 	IdempotencyTTL time.Duration `env:"IDEMPOTENCY_TTL" envDefault:"24h"`
 
+	// Outbox
+	// OutboxMaxAttempts is how many delivery failures an outbox event
+	// tolerates before the publisher dead-letters it (stops retrying).
+	OutboxMaxAttempts int `env:"OUTBOX_MAX_ATTEMPTS" envDefault:"5"`
+
 	// Authentication (optional - leave empty to disable)
 	JWTSecret     string        `env:"JWT_SECRET"       envDefault:""`
 	JWTExpiration time.Duration `env:"JWT_EXPIRATION"   envDefault:"24h"`
 	AuthEnabled   bool          `env:"AUTH_ENABLED"     envDefault:"false"`
+
+	// Reconciliation
+	// ReconciliationInterval is how often the background reconciliation
+	// scheduler runs. Set to 0 to disable the scheduler (the on-demand
+	// /api/v1/ledger/consistency endpoint keeps working either way).
+	ReconciliationInterval time.Duration `env:"RECONCILIATION_INTERVAL" envDefault:"1h"`
+
+	// Tracing
+	TracingEnabled bool   `env:"TRACING_ENABLED" envDefault:"false"`
+	OTLPEndpoint   string `env:"OTEL_EXPORTER_OTLP_ENDPOINT" envDefault:""`
 }
 
 // Load loads configuration from environment variables and validates it.

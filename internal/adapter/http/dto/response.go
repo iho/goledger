@@ -127,9 +127,71 @@ type ListTransfersResponse struct {
 	Transfers []*TransferResponse `json:"transfers"`
 }
 
+// ListTransfersCursorResponse represents a keyset-paginated page of
+// transfers. NextCursor is empty when there are no more results.
+type ListTransfersCursorResponse struct {
+	NextCursor string              `json:"next_cursor,omitempty"`
+	Transfers  []*TransferResponse `json:"transfers"`
+}
+
 // ListEntriesResponse represents a list of entries.
 type ListEntriesResponse struct {
 	Entries []*EntryResponse `json:"entries"`
+}
+
+// AuditLogResponse represents an audit log entry in API responses.
+type AuditLogResponse struct {
+	CreatedAt    time.Time      `json:"created_at"`
+	BeforeState  map[string]any `json:"before_state,omitempty"`
+	AfterState   map[string]any `json:"after_state,omitempty"`
+	ID           string         `json:"id"`
+	UserID       string         `json:"user_id"`
+	Action       string         `json:"action"`
+	ResourceType string         `json:"resource_type"`
+	ResourceID   string         `json:"resource_id"`
+	IPAddress    string         `json:"ip_address,omitempty"`
+	UserAgent    string         `json:"user_agent,omitempty"`
+	RequestID    string         `json:"request_id,omitempty"`
+	Status       string         `json:"status"`
+	ErrorMessage string         `json:"error_message,omitempty"`
+	// PrevHash/Hash/ChainSeq support independent, offline tamper-evidence
+	// verification of the audit trail - see verify_audit_log_chain() in
+	// migration 000012.
+	PrevHash string `json:"prev_hash,omitempty"`
+	Hash     string `json:"hash,omitempty"`
+	ChainSeq int64  `json:"chain_seq,omitempty"`
+}
+
+// AuditLogFromDomain converts a domain audit log to a response.
+func AuditLogFromDomain(a *domain.AuditLog) *AuditLogResponse {
+	return &AuditLogResponse{
+		ID:           a.ID,
+		UserID:       a.UserID,
+		Action:       a.Action,
+		ResourceType: a.ResourceType,
+		ResourceID:   a.ResourceID,
+		IPAddress:    a.IPAddress,
+		UserAgent:    a.UserAgent,
+		RequestID:    a.RequestID,
+		BeforeState:  a.BeforeState,
+		AfterState:   a.AfterState,
+		Status:       a.Status,
+		ErrorMessage: a.ErrorMessage,
+		CreatedAt:    a.CreatedAt,
+		PrevHash:     a.PrevHash,
+		Hash:         a.Hash,
+		ChainSeq:     a.ChainSeq,
+	}
+}
+
+// AuditLogsFromDomain converts domain audit logs to responses.
+func AuditLogsFromDomain(logs []*domain.AuditLog) []*AuditLogResponse {
+	result := make([]*AuditLogResponse, len(logs))
+	for i, l := range logs {
+		result[i] = AuditLogFromDomain(l)
+	}
+
+	return result
 }
 
 // ErrorResponse represents an error in API responses.

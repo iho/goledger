@@ -104,3 +104,10 @@ func (f *fakeLedgerRepository) CheckConsistency(ctx context.Context) (totalBalan
 	f.calls++
 	return f.totalBalance, f.totalAmount, f.err
 }
+
+func (f *fakeLedgerRepository) CheckConsistencyByCurrency(ctx context.Context) ([]CurrencyConsistency, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return []CurrencyConsistency{{Currency: "USD", TotalBalance: f.totalBalance, TotalEntries: f.totalAmount}}, nil
+}

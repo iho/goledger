@@ -20,6 +20,14 @@ type AuditLog struct {
 	Status       string // success, failure, error
 	ErrorMessage string // If status=error, the error message
 	CreatedAt    time.Time
+
+	// PrevHash, Hash, and ChainSeq are assigned server-side by the
+	// audit_logs_chain_hash trigger (migration 000012) for tamper evidence;
+	// application code never sets them directly. Empty/zero on a value
+	// that hasn't been read back from the database yet.
+	PrevHash string
+	Hash     string
+	ChainSeq int64
 }
 
 // JSON is a type alias for JSON data

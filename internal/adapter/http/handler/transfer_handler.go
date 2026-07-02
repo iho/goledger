@@ -18,6 +18,7 @@ type TransferService interface {
 	CreateBatchTransfer(ctx context.Context, input usecase.CreateBatchTransferInput) ([]*domain.Transfer, error)
 	GetTransfer(ctx context.Context, id string) (*domain.Transfer, error)
 	ListTransfersByAccount(ctx context.Context, input usecase.ListTransfersByAccountInput) ([]*domain.Transfer, error)
+	ListTransfersByAccountCursor(ctx context.Context, input usecase.ListTransfersByAccountCursorInput) (*usecase.ListTransfersByAccountCursorResult, error)
 	ReverseTransfer(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error)
 }
 
@@ -100,7 +101,9 @@ func (h *TransferHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.TransferFromDomain(transfer))
 }
 
-// ListByAccount lists transfers for an account.
+// ListByAccount lists transfers for an account. Prefer the "cursor" query
+// param (keyset pagination, stable under concurrent writes); "offset" is
+// kept for backward compatibility.
 func (h *TransferHandler) ListByAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := chi.URLParam(r, "id")
 	if accountID == "" {
@@ -109,6 +112,26 @@ func (h *TransferHandler) ListByAccount(w http.ResponseWriter, r *http.Request) 
 	}
 
 	limit := parseIntQuery(r, "limit", 20)
+
+	if cursor := r.URL.Query().Get("cursor"); cursor != "" || r.URL.Query().Has("cursor") {
+		result, err := h.transferUC.ListTransfersByAccountCursor(r.Context(), usecase.ListTransfersByAccountCursorInput{
+			AccountID: accountID,
+			Cursor:    cursor,
+			Limit:     limit,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to list transfers", err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, dto.ListTransfersCursorResponse{
+			Transfers:  dto.TransfersFromDomain(result.Transfers),
+			NextCursor: result.NextCursor,
+		})
+
+		return
+	}
+
 	offset := parseIntQuery(r, "offset", 0)
 
 	transfers, err := h.transferUC.ListTransfersByAccount(r.Context(), usecase.ListTransfersByAccountInput{

@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/iho/goledger/internal/infrastructure/postgres/generated"
+	"github.com/iho/goledger/internal/usecase"
 )
 
 // LedgerRepository implements usecase.LedgerRepository.
@@ -39,6 +40,36 @@ func (r *LedgerRepository) CheckConsistency(ctx context.Context) (totalDebits, t
 	}
 
 	return totalBalance, totalAmount, nil
+}
+
+// CheckConsistencyByCurrency checks ledger consistency grouped by currency.
+func (r *LedgerRepository) CheckConsistencyByCurrency(ctx context.Context) ([]usecase.CurrencyConsistency, error) {
+	q := generated.New(r.pool)
+	rows, err := q.CheckLedgerConsistencyByCurrency(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]usecase.CurrencyConsistency, 0, len(rows))
+	for _, row := range rows {
+		totalBalance, err := toDecimal(row.TotalAccountBalance)
+		if err != nil {
+			return nil, err
+		}
+
+		totalEntries, err := toDecimal(row.TotalEntryAmount)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, usecase.CurrencyConsistency{
+			Currency:     row.Currency,
+			TotalBalance: totalBalance,
+			TotalEntries: totalEntries,
+		})
+	}
+
+	return results, nil
 }
 
 func toDecimal(n pgtype.Numeric) (decimal.Decimal, error) {

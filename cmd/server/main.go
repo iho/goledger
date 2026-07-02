@@ -11,6 +11,8 @@ import (
 
 	"log/slog"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -21,13 +23,16 @@ import (
 	"github.com/iho/goledger/internal/adapter/http/handler"
 	postgresRepo "github.com/iho/goledger/internal/adapter/repository/postgres"
 	redisRepo "github.com/iho/goledger/internal/adapter/repository/redis"
+	"github.com/iho/goledger/internal/domain"
 	"github.com/iho/goledger/internal/infrastructure/auth"
 	"github.com/iho/goledger/internal/infrastructure/config"
 	"github.com/iho/goledger/internal/infrastructure/eventpublisher"
 	"github.com/iho/goledger/internal/infrastructure/logger"
 	"github.com/iho/goledger/internal/infrastructure/metrics"
 	"github.com/iho/goledger/internal/infrastructure/postgres"
+	"github.com/iho/goledger/internal/infrastructure/reconciliation"
 	"github.com/iho/goledger/internal/infrastructure/redis"
+	"github.com/iho/goledger/internal/infrastructure/tracing"
 	"github.com/iho/goledger/internal/usecase"
 )
 
@@ -54,6 +59,24 @@ func run() int {
 	slog.SetDefault(l)
 
 	ctx := context.Background()
+
+	// Setup distributed tracing (no-op unless TRACING_ENABLED=true)
+	shutdownTracing, err := tracing.Setup(ctx, tracing.Config{
+		Enabled:      cfg.TracingEnabled,
+		ServiceName:  "goledger",
+		OTLPEndpoint: cfg.OTLPEndpoint,
+	})
+	if err != nil {
+		l.Error("failed to set up tracing", "error", err)
+		return 1
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.HTTPShutdownTimeout)
+		defer cancel()
+		if err := shutdownTracing(shutdownCtx); err != nil {
+			l.Error("failed to shut down tracing", "error", err)
+		}
+	}()
 
 	// Initialize metrics
 	m := metrics.New()
@@ -106,6 +129,7 @@ func run() int {
 	ledgerUC := usecase.NewLedgerUseCase(ledgerRepo)
 	holdUC := usecase.NewHoldUseCase(txManager, accountRepo, holdRepo, transferRepo, entryRepo, outboxRepo, auditRepo, idGen, m)
 	userUC := usecase.NewUserUseCase(userRepo)
+	reconciliationUC := usecase.NewReconciliationUseCase(accountRepo, entryRepo, ledgerRepo)
 
 	// Initialize handlers
 	accountHandler := handler.NewAccountHandler(accountUC)
@@ -117,7 +141,8 @@ func run() int {
 
 	// Create JWT manager for authentication
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiration)
-	authHandler := handler.NewAuthHandler(jwtManager, userUC)
+	authHandler := handler.NewAuthHandler(jwtManager, userUC).WithAudit(auditRepo, idGen)
+	auditHandler := handler.NewAuditHandler(auditRepo)
 
 	// Create router
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
@@ -128,15 +153,20 @@ func run() int {
 		LedgerHandler:    ledgerHandler,
 		HoldHandler:      holdHandler,
 		AuthHandler:      authHandler,
+		AuditHandler:     auditHandler,
 		IdempotencyStore: idempotencyStore,
 		Logger:           l,
+		JWTManager:       jwtManager,
+		AuthEnabled:      cfg.AuthEnabled,
 	})
 
 	// Create event publisher worker
 	eventPublisher := eventpublisher.NewEventPublisher(eventpublisher.Config{
-		OutboxRepo: outboxRepo,
-		Publisher:  eventpublisher.NewLogPublisher(l),
-		Logger:     l,
+		OutboxRepo:  outboxRepo,
+		Publisher:   eventpublisher.NewLogPublisher(l),
+		Logger:      l,
+		Metrics:     m,
+		MaxAttempts: cfg.OutboxMaxAttempts,
 	})
 
 	// Start event publisher in background
@@ -149,18 +179,51 @@ func run() int {
 		}
 	}()
 
-	// Create HTTP server with timeouts
+	// Start scheduled reconciliation in background (0 interval disables it;
+	// the on-demand /api/v1/ledger/consistency endpoint keeps working either way)
+	var cancelReconciliation context.CancelFunc
+	if cfg.ReconciliationInterval > 0 {
+		reconciliationScheduler := reconciliation.NewScheduler(reconciliation.Config{
+			ReconciliationUC: reconciliationUC,
+			Logger:           l,
+			Metrics:          m,
+			Interval:         cfg.ReconciliationInterval,
+		})
+
+		var reconciliationCtx context.Context
+		reconciliationCtx, cancelReconciliation = context.WithCancel(context.Background())
+
+		go func() {
+			if err := reconciliationScheduler.Start(reconciliationCtx); err != nil && !errors.Is(err, context.Canceled) {
+				l.Error("reconciliation scheduler stopped with error", "error", err)
+			}
+		}()
+	}
+
+	// Create HTTP server with timeouts. otelhttp.NewHandler wraps the whole
+	// router with one span per request; a no-op when tracing is disabled.
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,
-		Handler:      router,
+		Handler:      otelhttp.NewHandler(router, "goledger-http"),
 		ReadTimeout:  cfg.HTTPReadTimeout,
 		WriteTimeout: cfg.HTTPWriteTimeout,
 		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
 
-	// Create gRPC server with idempotency interceptor
+	// Create gRPC server with idempotency and, when AUTH_ENABLED, auth/RBAC interceptors.
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
+		grpcMiddleware.IdempotencyInterceptor(idempotencyStore),
+	}
+	if cfg.AuthEnabled {
+		unaryInterceptors = append(unaryInterceptors,
+			grpcMiddleware.AuthInterceptor(jwtManager),
+			grpcMiddleware.MethodRoleInterceptor(grpcMethodRoles),
+		)
+	}
+
 	grpcSrv := grpc.NewServer(
-		grpc.UnaryInterceptor(grpcMiddleware.IdempotencyInterceptor(idempotencyStore)),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 	)
 
 	// Register gRPC services
@@ -213,6 +276,11 @@ func run() int {
 	cancelPublisher()
 	l.Info("event publisher stopped")
 
+	if cancelReconciliation != nil {
+		cancelReconciliation()
+		l.Info("reconciliation scheduler stopped")
+	}
+
 	// Shutdown gRPC server
 	grpcSrv.GracefulStop()
 	l.Info("gRPC server stopped")
@@ -233,4 +301,17 @@ func resolveGRPCPort() string {
 		return port
 	}
 	return "50051"
+}
+
+// grpcMethodRoles maps mutating RPCs to their minimum required role, mirroring
+// the HTTP route RBAC matrix (admin manages accounts, operator moves money).
+// RPCs not listed here only require a valid authenticated user.
+var grpcMethodRoles = map[string]domain.Role{
+	"/goledger.v1.AccountService/CreateAccount":        domain.RoleAdmin,
+	"/goledger.v1.TransferService/CreateTransfer":      domain.RoleOperator,
+	"/goledger.v1.TransferService/CreateBatchTransfer": domain.RoleOperator,
+	"/goledger.v1.TransferService/ReverseTransfer":     domain.RoleOperator,
+	"/goledger.v1.HoldService/HoldFunds":               domain.RoleOperator,
+	"/goledger.v1.HoldService/VoidHold":                domain.RoleOperator,
+	"/goledger.v1.HoldService/CaptureHold":             domain.RoleOperator,
 }

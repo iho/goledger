@@ -31,6 +31,11 @@ type TransferRepository interface {
 	Create(ctx context.Context, tx Transaction, transfer *domain.Transfer) error
 	GetByID(ctx context.Context, id string) (*domain.Transfer, error)
 	ListByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Transfer, error)
+	// ListByAccountCursor is the keyset-pagination alternative to
+	// ListByAccount: cursor is the ID of the last transfer seen (empty to
+	// start from the most recent), avoiding the skip/duplicate-under-
+	// concurrent-writes problem OFFSET has on large, actively-written tables.
+	ListByAccountCursor(ctx context.Context, accountID, cursor string, limit int) ([]*domain.Transfer, error)
 }
 
 // EntryRepository defines data access for entries.
@@ -39,11 +44,30 @@ type EntryRepository interface {
 	GetByTransfer(ctx context.Context, transferID string) ([]*domain.Entry, error)
 	GetByAccount(ctx context.Context, accountID string, limit, offset int) ([]*domain.Entry, error)
 	GetBalanceAtTime(ctx context.Context, accountID string, at time.Time) (decimal.Decimal, error)
+	// SumAmountsByAccount returns the sum of all entry amounts for an
+	// account. Since balance always starts at zero, this should equal the
+	// account's current recorded balance.
+	SumAmountsByAccount(ctx context.Context, accountID string) (decimal.Decimal, error)
+	// GetAllByAccountOrdered returns every entry for an account ordered by
+	// account_version ascending, for walking the balance/version chain.
+	GetAllByAccountOrdered(ctx context.Context, accountID string) ([]*domain.Entry, error)
+}
+
+// CurrencyConsistency is the debit/credit consistency check result for a
+// single currency.
+type CurrencyConsistency struct {
+	Currency     string
+	TotalBalance decimal.Decimal
+	TotalEntries decimal.Decimal
 }
 
 // LedgerRepository defines data access for ledger-wide operations.
 type LedgerRepository interface {
 	CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error)
+	// CheckConsistencyByCurrency is the same invariant as CheckConsistency,
+	// grouped by currency so offsetting errors in different currencies
+	// don't cancel out in one global sum.
+	CheckConsistencyByCurrency(ctx context.Context) ([]CurrencyConsistency, error)
 }
 
 // HoldRepository defines data access for holds.
@@ -62,6 +86,14 @@ type OutboxRepository interface {
 	MarkPublished(ctx context.Context, id string, publishedAt time.Time) error
 	GetByAggregate(ctx context.Context, aggregateType, aggregateID string, limit, offset int) ([]*domain.OutboxEvent, error)
 	DeletePublished(ctx context.Context, before time.Time) error
+	// RecordFailure increments the event's attempt counter and stores the
+	// error, returning the new attempt count so the caller can decide
+	// whether to dead-letter it.
+	RecordFailure(ctx context.Context, id, lastError string) (attempts int, err error)
+	// MarkDeadLettered stops the publisher from retrying this event.
+	MarkDeadLettered(ctx context.Context, id string, at time.Time) error
+	// GetDeadLettered lists dead-lettered events for operator inspection.
+	GetDeadLettered(ctx context.Context, limit, offset int) ([]*domain.OutboxEvent, error)
 }
 
 // AuditRepository defines data access for audit logs.

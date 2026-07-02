@@ -28,3 +28,69 @@ func (q *Queries) CheckLedgerConsistency(ctx context.Context) (CheckLedgerConsis
 	err := row.Scan(&i.TotalAccountBalance, &i.TotalEntryAmount)
 	return i, err
 }
+
+const checkLedgerConsistencyByCurrency = `-- name: CheckLedgerConsistencyByCurrency :many
+WITH balance_by_currency AS (
+    SELECT currency, COALESCE(SUM(balance), 0)::NUMERIC AS total_balance
+    FROM accounts
+    GROUP BY currency
+),
+entries_by_currency AS (
+    SELECT a.currency, COALESCE(SUM(e.amount), 0)::NUMERIC AS total_amount
+    FROM entries e
+    JOIN accounts a ON a.id = e.account_id
+    GROUP BY a.currency
+)
+SELECT
+    b.currency AS currency,
+    b.total_balance AS total_account_balance,
+    COALESCE(e.total_amount, 0)::NUMERIC AS total_entry_amount
+FROM balance_by_currency b
+LEFT JOIN entries_by_currency e ON e.currency = b.currency
+ORDER BY b.currency
+`
+
+type CheckLedgerConsistencyByCurrencyRow struct {
+	Currency            string         `json:"currency"`
+	TotalAccountBalance pgtype.Numeric `json:"total_account_balance"`
+	TotalEntryAmount    pgtype.Numeric `json:"total_entry_amount"`
+}
+
+// Same invariant as CheckLedgerConsistency, but grouped by currency so
+// offsetting errors in different currencies don't cancel each other out in
+// one global sum.
+func (q *Queries) CheckLedgerConsistencyByCurrency(ctx context.Context) ([]CheckLedgerConsistencyByCurrencyRow, error) {
+	rows, err := q.db.Query(ctx, checkLedgerConsistencyByCurrency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CheckLedgerConsistencyByCurrencyRow{}
+	for rows.Next() {
+		var i CheckLedgerConsistencyByCurrencyRow
+		if err := rows.Scan(&i.Currency, &i.TotalAccountBalance, &i.TotalEntryAmount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumEntryAmountsByAccount = `-- name: SumEntryAmountsByAccount :one
+SELECT COALESCE(SUM(amount), 0)::NUMERIC AS total_amount
+FROM entries
+WHERE account_id = $1
+`
+
+// Total of all entries for an account. Because an account's balance always
+// starts at zero and only ever changes via entries, this should equal the
+// account's current recorded balance.
+func (q *Queries) SumEntryAmountsByAccount(ctx context.Context, accountID string) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, sumEntryAmountsByAccount, accountID)
+	var total_amount pgtype.Numeric
+	err := row.Scan(&total_amount)
+	return total_amount, err
+}

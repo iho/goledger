@@ -29,6 +29,21 @@ type OutboxEvent struct {
 	CreatedAt     time.Time
 	PublishedAt   *time.Time
 	Published     bool
+	// EventVersion tags the schema of Payload, so downstream consumers can
+	// evolve the payload shape without breaking older readers. Defaults to
+	// 1; bump when a payload's fields change in an incompatible way.
+	EventVersion int32
+	// AggregateSequence is a per-aggregate (aggregate_type+aggregate_id)
+	// monotonically increasing counter assigned by the database at insert
+	// time, letting consumers detect gaps or out-of-order delivery.
+	AggregateSequence int64
+
+	// Attempts, LastError, and DeadLetteredAt track delivery retries. Once
+	// DeadLetteredAt is set, the publisher stops polling this event so one
+	// poison message can't block the rest of the queue.
+	Attempts       int
+	LastError      string
+	DeadLetteredAt *time.Time
 }
 
 // TransferCreatedEvent payload

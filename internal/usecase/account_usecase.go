@@ -45,12 +45,18 @@ type CreateAccountInput struct {
 }
 
 // CreateAccount creates a new account.
-func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccountInput) (*domain.Account, error) {
+func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccountInput) (account *domain.Account, err error) {
+	defer func() {
+		if err != nil {
+			uc.auditFailedAccount(ctx, input, err)
+		}
+	}()
+
 	// Validate input
-	if err := domain.ValidateAccountName(input.Name); err != nil {
+	if err = domain.ValidateAccountName(input.Name); err != nil {
 		return nil, err
 	}
-	if err := domain.ValidateCurrency(input.Currency); err != nil {
+	if err = domain.ValidateCurrency(input.Currency); err != nil {
 		return nil, err
 	}
 
@@ -67,7 +73,7 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 	}
 	defer func() { _ = tx.Rollback(txCtx) }()
 
-	account := &domain.Account{
+	account = &domain.Account{
 		ID:                   uc.idGen.Generate(),
 		Name:                 input.Name,
 		Currency:             input.Currency,
@@ -86,10 +92,7 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 
 	// Audit logging
 	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
+		userID, requestID, ipAddress, userAgent := auditActor(ctx)
 
 		auditLog := &domain.AuditLog{
 			ID:           uc.idGen.Generate(),
@@ -97,6 +100,9 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 			Action:       string(domain.AuditActionAccountCreate),
 			ResourceType: "account",
 			ResourceID:   account.ID,
+			RequestID:    requestID,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
 			AfterState:   domain.MarshalState(account),
 			Status:       string(domain.AuditStatusSuccess),
 			CreatedAt:    time.Now().UTC(),
@@ -115,6 +121,38 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 	}
 
 	return account, nil
+}
+
+// auditFailedAccount records a failure audit row for a rejected account
+// creation attempt, outside any database transaction so it survives the
+// rollback that rejected it. Best-effort: an audit write failure here never
+// masks the original error.
+func (uc *AccountUseCase) auditFailedAccount(ctx context.Context, input CreateAccountInput, failErr error) {
+	if uc.auditRepo == nil {
+		return
+	}
+
+	userID, requestID, ipAddress, userAgent := auditActor(ctx)
+
+	auditLog := &domain.AuditLog{
+		ID:           uc.idGen.Generate(),
+		UserID:       userID,
+		Action:       string(domain.AuditActionAccountCreate),
+		ResourceType: "account",
+		RequestID:    requestID,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		BeforeState: domain.JSON{
+			"name":     input.Name,
+			"currency": input.Currency,
+		},
+		Status:       string(domain.AuditStatusFailure),
+		ErrorMessage: failErr.Error(),
+		CreatedAt:    time.Now().UTC(),
+	}
+	auditLog.ResourceID = auditLog.ID
+
+	_ = uc.auditRepo.Create(ctx, auditLog)
 }
 
 // GetAccount retrieves an account by ID.

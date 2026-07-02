@@ -35,6 +35,31 @@ type AuditLog struct {
 	Status       string             `json:"status"`
 	ErrorMessage *string            `json:"error_message"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	PrevHash     *string            `json:"prev_hash"`
+	Hash         *string            `json:"hash"`
+	ChainSeq     *int64             `json:"chain_seq"`
+}
+
+type AuditLogChainState struct {
+	ID       bool   `json:"id"`
+	LastHash string `json:"last_hash"`
+	LastSeq  int64  `json:"last_seq"`
+}
+
+type AuditLogsDefault struct {
+	ID           string             `json:"id"`
+	UserID       string             `json:"user_id"`
+	Action       string             `json:"action"`
+	ResourceType string             `json:"resource_type"`
+	ResourceID   string             `json:"resource_id"`
+	IpAddress    *string            `json:"ip_address"`
+	UserAgent    *string            `json:"user_agent"`
+	RequestID    *string            `json:"request_id"`
+	BeforeState  []byte             `json:"before_state"`
+	AfterState   []byte             `json:"after_state"`
+	Status       string             `json:"status"`
+	ErrorMessage *string            `json:"error_message"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type Entry struct {
@@ -60,14 +85,19 @@ type Hold struct {
 }
 
 type OutboxEvent struct {
-	ID            string             `json:"id"`
-	AggregateID   string             `json:"aggregate_id"`
-	AggregateType string             `json:"aggregate_type"`
-	EventType     string             `json:"event_type"`
-	Payload       []byte             `json:"payload"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	PublishedAt   pgtype.Timestamptz `json:"published_at"`
-	Published     bool               `json:"published"`
+	ID                string             `json:"id"`
+	AggregateID       string             `json:"aggregate_id"`
+	AggregateType     string             `json:"aggregate_type"`
+	EventType         string             `json:"event_type"`
+	Payload           []byte             `json:"payload"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	PublishedAt       pgtype.Timestamptz `json:"published_at"`
+	Published         bool               `json:"published"`
+	EventVersion      int32              `json:"event_version"`
+	AggregateSequence int64              `json:"aggregate_sequence"`
+	Attempts          int32              `json:"attempts"`
+	LastError         *string            `json:"last_error"`
+	DeadLetteredAt    pgtype.Timestamptz `json:"dead_lettered_at"`
 }
 
 type Transfer struct {

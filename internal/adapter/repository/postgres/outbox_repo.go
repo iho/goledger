@@ -36,17 +36,29 @@ func (r *OutboxRepository) Create(ctx context.Context, tx usecase.Transaction, e
 		return err
 	}
 
-	_, err = queries.CreateOutboxEvent(ctx, generated.CreateOutboxEventParams{
+	eventVersion := event.EventVersion
+	if eventVersion == 0 {
+		eventVersion = 1
+	}
+
+	row, err := queries.CreateOutboxEvent(ctx, generated.CreateOutboxEventParams{
 		ID:            event.ID,
 		AggregateID:   event.AggregateID,
 		AggregateType: event.AggregateType,
 		EventType:     event.EventType,
+		EventVersion:  eventVersion,
 		Payload:       payload,
 		CreatedAt:     timeToPgTimestamptz(event.CreatedAt),
 		Published:     event.Published,
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	event.EventVersion = row.EventVersion
+	event.AggregateSequence = row.AggregateSequence
+
+	return nil
 }
 
 // GetUnpublished retrieves unpublished events.
@@ -97,6 +109,45 @@ func (r *OutboxRepository) DeletePublished(ctx context.Context, before time.Time
 	return r.queries.DeletePublishedEvents(ctx, timeToPgTimestamptz(before))
 }
 
+// RecordFailure increments the event's attempt counter and stores the error.
+func (r *OutboxRepository) RecordFailure(ctx context.Context, id, lastError string) (int, error) {
+	attempts, err := r.queries.RecordOutboxFailure(ctx, generated.RecordOutboxFailureParams{
+		ID:        id,
+		LastError: &lastError,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return int(attempts), nil
+}
+
+// MarkDeadLettered stops the publisher from retrying this event.
+func (r *OutboxRepository) MarkDeadLettered(ctx context.Context, id string, at time.Time) error {
+	return r.queries.MarkOutboxDeadLettered(ctx, generated.MarkOutboxDeadLetteredParams{
+		ID:             id,
+		DeadLetteredAt: timeToPgTimestamptz(at),
+	})
+}
+
+// GetDeadLettered lists dead-lettered events for operator inspection.
+func (r *OutboxRepository) GetDeadLettered(ctx context.Context, limit, offset int) ([]*domain.OutboxEvent, error) {
+	rows, err := r.queries.GetDeadLetteredEvents(ctx, generated.GetDeadLetteredEventsParams{
+		Limit:  toInt32(limit),
+		Offset: toInt32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]*domain.OutboxEvent, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, rowToOutboxEvent(row))
+	}
+
+	return events, nil
+}
+
 func rowToOutboxEvent(row generated.OutboxEvent) *domain.OutboxEvent {
 	var payload map[string]any
 	if row.Payload != nil {
@@ -109,14 +160,30 @@ func rowToOutboxEvent(row generated.OutboxEvent) *domain.OutboxEvent {
 		publishedAt = &t
 	}
 
+	var deadLetteredAt *time.Time
+	if row.DeadLetteredAt.Valid {
+		t := row.DeadLetteredAt.Time
+		deadLetteredAt = &t
+	}
+
+	var lastError string
+	if row.LastError != nil {
+		lastError = *row.LastError
+	}
+
 	return &domain.OutboxEvent{
-		ID:            row.ID,
-		AggregateID:   row.AggregateID,
-		AggregateType: row.AggregateType,
-		EventType:     row.EventType,
-		Payload:       payload,
-		CreatedAt:     row.CreatedAt.Time,
-		PublishedAt:   publishedAt,
-		Published:     row.Published,
+		ID:                row.ID,
+		AggregateID:       row.AggregateID,
+		AggregateType:     row.AggregateType,
+		EventType:         row.EventType,
+		Payload:           payload,
+		CreatedAt:         row.CreatedAt.Time,
+		PublishedAt:       publishedAt,
+		Published:         row.Published,
+		EventVersion:      row.EventVersion,
+		AggregateSequence: row.AggregateSequence,
+		Attempts:          int(row.Attempts),
+		LastError:         lastError,
+		DeadLetteredAt:    deadLetteredAt,
 	}
 }

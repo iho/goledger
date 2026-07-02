@@ -126,3 +126,50 @@ func (q *Queries) ListTransfersByAccount(ctx context.Context, arg ListTransfersB
 	}
 	return items, nil
 }
+
+const listTransfersByAccountCursor = `-- name: ListTransfersByAccountCursor :many
+SELECT id, from_account_id, to_account_id, amount, created_at, event_at, metadata, reversed_transfer_id FROM transfers
+WHERE (from_account_id = $1 OR to_account_id = $1)
+  AND ($3::text = '' OR id < $3::text)
+ORDER BY id DESC
+LIMIT $2
+`
+
+type ListTransfersByAccountCursorParams struct {
+	FromAccountID string `json:"from_account_id"`
+	Limit         int32  `json:"limit"`
+	Cursor        string `json:"cursor"`
+}
+
+// Keyset pagination: transfer IDs are ULIDs (lexically sortable by
+// creation time), so "id < cursor" is a stable, index-friendly substitute
+// for OFFSET that doesn't skip/duplicate rows under concurrent inserts.
+// An empty cursor starts from the most recent transfer.
+func (q *Queries) ListTransfersByAccountCursor(ctx context.Context, arg ListTransfersByAccountCursorParams) ([]Transfer, error) {
+	rows, err := q.db.Query(ctx, listTransfersByAccountCursor, arg.FromAccountID, arg.Limit, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Transfer{}
+	for rows.Next() {
+		var i Transfer
+		if err := rows.Scan(
+			&i.ID,
+			&i.FromAccountID,
+			&i.ToAccountID,
+			&i.Amount,
+			&i.CreatedAt,
+			&i.EventAt,
+			&i.Metadata,
+			&i.ReversedTransferID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

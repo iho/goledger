@@ -55,6 +55,44 @@ func TestProcessEventsContinuesOnPublishError(t *testing.T) {
 	}
 }
 
+func TestProcessEventsDeadLettersAfterMaxAttempts(t *testing.T) {
+	repo := &stubOutboxRepo{
+		events: []*domain.OutboxEvent{{ID: "evt-1", EventType: "type"}},
+	}
+	pub := &stubPublisher{
+		errorsByID: map[string]error{"evt-1": errors.New("permanently broken")},
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
+	ep := NewEventPublisher(Config{
+		OutboxRepo:  repo,
+		Publisher:   pub,
+		Logger:      logger,
+		BatchSize:   10,
+		Interval:    5 * time.Millisecond,
+		MaxAttempts: 3,
+	})
+
+	for range 2 {
+		if err := ep.processEvents(context.Background()); err != nil {
+			t.Fatalf("processEvents failed: %v", err)
+		}
+		if len(repo.deadLettered) != 0 {
+			t.Fatalf("expected no dead-lettering before max attempts, got %#v", repo.deadLettered)
+		}
+	}
+
+	if err := ep.processEvents(context.Background()); err != nil {
+		t.Fatalf("processEvents failed: %v", err)
+	}
+
+	if len(repo.deadLettered) != 1 || repo.deadLettered[0] != "evt-1" {
+		t.Fatalf("expected evt-1 to be dead-lettered after 3 attempts, got %#v", repo.deadLettered)
+	}
+	if repo.failures["evt-1"] != 3 {
+		t.Fatalf("expected 3 recorded failures, got %d", repo.failures["evt-1"])
+	}
+}
+
 func TestStartStopsOnContextCancellation(t *testing.T) {
 	repo := &stubOutboxRepo{}
 	pub := &stubPublisher{}
@@ -92,8 +130,10 @@ func newTestPublisher(repo *stubOutboxRepo, pub *stubPublisher) *EventPublisher 
 }
 
 type stubOutboxRepo struct {
-	events []*domain.OutboxEvent
-	marked []string
+	events       []*domain.OutboxEvent
+	marked       []string
+	failures     map[string]int
+	deadLettered []string
 }
 
 func (s *stubOutboxRepo) Create(ctx context.Context, tx usecase.Transaction, event *domain.OutboxEvent) error {
@@ -118,6 +158,23 @@ func (s *stubOutboxRepo) GetByAggregate(ctx context.Context, aggregateType, aggr
 
 func (s *stubOutboxRepo) DeletePublished(ctx context.Context, before time.Time) error {
 	return nil
+}
+
+func (s *stubOutboxRepo) RecordFailure(ctx context.Context, id, lastError string) (int, error) {
+	if s.failures == nil {
+		s.failures = make(map[string]int)
+	}
+	s.failures[id]++
+	return s.failures[id], nil
+}
+
+func (s *stubOutboxRepo) MarkDeadLettered(ctx context.Context, id string, at time.Time) error {
+	s.deadLettered = append(s.deadLettered, id)
+	return nil
+}
+
+func (s *stubOutboxRepo) GetDeadLettered(ctx context.Context, limit, offset int) ([]*domain.OutboxEvent, error) {
+	return nil, nil
 }
 
 type stubPublisher struct {

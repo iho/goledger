@@ -46,9 +46,19 @@ func NewHoldUseCase(
 	}
 }
 
-func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount decimal.Decimal) (*domain.Hold, error) {
+func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount decimal.Decimal) (hold *domain.Hold, err error) {
+	defer func() {
+		if err != nil {
+			uc.auditFailedHold(ctx, domain.AuditActionHoldCreate, domain.JSON{
+				"account_id": accountID,
+				"amount":     amount.String(),
+			}, err)
+		}
+	}()
+
 	if amount.LessThanOrEqual(decimal.Zero) {
-		return nil, domain.ErrInvalidAmount
+		err = domain.ErrInvalidAmount
+		return nil, err
 	}
 
 	// Add transaction timeout
@@ -68,12 +78,12 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 	}
 
 	// Check available balance
-	if err := account.ValidateDebit(amount); err != nil {
+	if err = account.ValidateDebit(amount); err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
-	hold := &domain.Hold{
+	hold = &domain.Hold{
 		ID:        uc.idGen.Generate(),
 		AccountID: accountID,
 		Amount:    amount,
@@ -97,6 +107,7 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 		AggregateID:   hold.ID,
 		AggregateType: domain.AggregateTypeHold,
 		EventType:     domain.EventTypeHoldCreated,
+		EventVersion:  1,
 		Payload: map[string]any{
 			"hold_id":    hold.ID,
 			"account_id": hold.AccountID,
@@ -112,10 +123,7 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 
 	// Audit logging
 	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
+		userID, requestID, ipAddress, userAgent := auditActor(ctx)
 
 		auditLog := &domain.AuditLog{
 			ID:           uc.idGen.Generate(),
@@ -123,6 +131,9 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 			Action:       string(domain.AuditActionHoldCreate),
 			ResourceType: "hold",
 			ResourceID:   hold.ID,
+			RequestID:    requestID,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
 			AfterState:   domain.MarshalState(hold),
 			Status:       string(domain.AuditStatusSuccess),
 			CreatedAt:    time.Now().UTC(),
@@ -144,7 +155,13 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 	return hold, nil
 }
 
-func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
+func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) (err error) {
+	defer func() {
+		if err != nil {
+			uc.auditFailedHold(ctx, domain.AuditActionHoldVoid, domain.JSON{"hold_id": holdID}, err)
+		}
+	}()
+
 	start := time.Now()
 	// Add transaction timeout
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
@@ -162,7 +179,8 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	}
 
 	if hold.Status != domain.HoldStatusActive {
-		return domain.ErrHoldNotActive
+		err = domain.ErrHoldNotActive
+		return err
 	}
 
 	account, err := uc.accountRepo.GetByIDForUpdate(txCtx, tx, hold.AccountID)
@@ -191,6 +209,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 		AggregateID:   hold.ID,
 		AggregateType: domain.AggregateTypeHold,
 		EventType:     domain.EventTypeHoldVoided,
+		EventVersion:  1,
 		Payload: map[string]any{
 			"hold_id":    hold.ID,
 			"account_id": hold.AccountID,
@@ -214,10 +233,7 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 
 	// Audit logging
 	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
+		userID, requestID, ipAddress, userAgent := auditActor(ctx)
 
 		auditLog := &domain.AuditLog{
 			ID:           uc.idGen.Generate(),
@@ -225,6 +241,9 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 			Action:       string(domain.AuditActionHoldVoid),
 			ResourceType: "hold",
 			ResourceID:   holdID,
+			RequestID:    requestID,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
 			Status:       string(domain.AuditStatusSuccess),
 			CreatedAt:    time.Now().UTC(),
 		}
@@ -234,7 +253,16 @@ func (uc *HoldUseCase) VoidHold(ctx context.Context, holdID string) error {
 	return nil
 }
 
-func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID string) (*domain.Transfer, error) {
+func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID string) (transfer *domain.Transfer, err error) {
+	defer func() {
+		if err != nil {
+			uc.auditFailedHold(ctx, domain.AuditActionHoldCapture, domain.JSON{
+				"hold_id":       holdID,
+				"to_account_id": toAccountID,
+			}, err)
+		}
+	}()
+
 	start := time.Now()
 	// Add transaction timeout
 	txCtx, cancel := context.WithTimeout(ctx, DefaultTransactionTimeout)
@@ -252,7 +280,8 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 	}
 
 	if hold.Status != domain.HoldStatusActive {
-		return nil, domain.ErrHoldNotActive
+		err = domain.ErrHoldNotActive
+		return nil, err
 	}
 
 	// Lock accounts (From is hold.AccountID)
@@ -293,7 +322,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 	now := time.Now().UTC()
 
 	// Create Transfer
-	transfer := &domain.Transfer{
+	transfer = &domain.Transfer{
 		ID:            uc.idGen.Generate(),
 		FromAccountID: hold.AccountID,
 		ToAccountID:   toAccountID,
@@ -366,6 +395,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 		AggregateID:   hold.ID,
 		AggregateType: domain.AggregateTypeHold,
 		EventType:     domain.EventTypeHoldCaptured,
+		EventVersion:  1,
 		Payload: map[string]any{
 			"hold_id":       hold.ID,
 			"transfer_id":   transfer.ID,
@@ -390,10 +420,7 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 
 	// Audit logging
 	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
+		userID, requestID, ipAddress, userAgent := auditActor(ctx)
 
 		auditLog := &domain.AuditLog{
 			ID:           uc.idGen.Generate(),
@@ -401,6 +428,9 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 			Action:       string(domain.AuditActionHoldCapture),
 			ResourceType: "hold",
 			ResourceID:   holdID,
+			RequestID:    requestID,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
 			AfterState:   domain.MarshalState(transfer),
 			Status:       string(domain.AuditStatusSuccess),
 			CreatedAt:    time.Now().UTC(),
@@ -409,6 +439,35 @@ func (uc *HoldUseCase) CaptureHold(ctx context.Context, holdID, toAccountID stri
 	}
 
 	return transfer, nil
+}
+
+// auditFailedHold records a failure audit row for a rejected hold
+// create/void/capture attempt, outside any database transaction so it
+// survives the rollback that rejected the operation. Best-effort: an audit
+// write failure here never masks the original error.
+func (uc *HoldUseCase) auditFailedHold(ctx context.Context, action domain.AuditAction, before domain.JSON, failErr error) {
+	if uc.auditRepo == nil {
+		return
+	}
+
+	userID, requestID, ipAddress, userAgent := auditActor(ctx)
+
+	auditLog := &domain.AuditLog{
+		ID:           uc.idGen.Generate(),
+		UserID:       userID,
+		Action:       string(action),
+		ResourceType: "hold",
+		RequestID:    requestID,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		BeforeState:  before,
+		Status:       string(domain.AuditStatusFailure),
+		ErrorMessage: failErr.Error(),
+		CreatedAt:    time.Now().UTC(),
+	}
+	auditLog.ResourceID = auditLog.ID
+
+	_ = uc.auditRepo.Create(ctx, auditLog)
 }
 
 // ListHoldsByAccountInput represents input for listing holds by account

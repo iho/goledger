@@ -7,16 +7,23 @@ import (
 	"time"
 
 	"github.com/iho/goledger/internal/domain"
+	"github.com/iho/goledger/internal/infrastructure/metrics"
 	"github.com/iho/goledger/internal/usecase"
 )
 
+// DefaultMaxAttempts is how many delivery failures an outbox event tolerates
+// before the publisher stops retrying it and marks it dead-lettered.
+const DefaultMaxAttempts = 5
+
 // EventPublisher handles publishing events from the outbox.
 type EventPublisher struct {
-	outboxRepo usecase.OutboxRepository
-	publisher  Publisher
-	logger     *slog.Logger
-	batchSize  int
-	interval   time.Duration
+	outboxRepo  usecase.OutboxRepository
+	publisher   Publisher
+	logger      *slog.Logger
+	metrics     *metrics.Metrics
+	batchSize   int
+	interval    time.Duration
+	maxAttempts int
 }
 
 // Publisher defines the interface for publishing events to external systems.
@@ -29,8 +36,12 @@ type Config struct {
 	OutboxRepo usecase.OutboxRepository
 	Publisher  Publisher
 	Logger     *slog.Logger
+	Metrics    *metrics.Metrics
 	BatchSize  int           // Number of events to fetch per batch
 	Interval   time.Duration // Polling interval
+	// MaxAttempts is how many delivery failures an event tolerates before
+	// being dead-lettered (stops being retried). Defaults to DefaultMaxAttempts.
+	MaxAttempts int
 }
 
 // NewEventPublisher creates a new EventPublisher.
@@ -44,13 +55,18 @@ func NewEventPublisher(cfg Config) *EventPublisher {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	if cfg.MaxAttempts == 0 {
+		cfg.MaxAttempts = DefaultMaxAttempts
+	}
 
 	return &EventPublisher{
-		outboxRepo: cfg.OutboxRepo,
-		publisher:  cfg.Publisher,
-		logger:     cfg.Logger,
-		batchSize:  cfg.BatchSize,
-		interval:   cfg.Interval,
+		outboxRepo:  cfg.OutboxRepo,
+		publisher:   cfg.Publisher,
+		logger:      cfg.Logger,
+		metrics:     cfg.Metrics,
+		batchSize:   cfg.BatchSize,
+		interval:    cfg.Interval,
+		maxAttempts: cfg.MaxAttempts,
 	}
 }
 
@@ -101,6 +117,8 @@ func (ep *EventPublisher) processEvents(ctx context.Context) error {
 				slog.String("event_id", event.ID),
 				slog.String("event_type", event.EventType),
 				slog.String("error", err.Error()))
+
+			ep.recordFailure(ctx, event, err)
 			// Continue processing other events even if one fails
 			continue
 		}
@@ -115,6 +133,39 @@ func (ep *EventPublisher) processEvents(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// recordFailure records a delivery failure and dead-letters the event once
+// it has exhausted maxAttempts, so one poison message can't block the rest
+// of the queue behind it (GetUnpublished excludes dead-lettered rows).
+func (ep *EventPublisher) recordFailure(ctx context.Context, event *domain.OutboxEvent, publishErr error) {
+	attempts, err := ep.outboxRepo.RecordFailure(ctx, event.ID, publishErr.Error())
+	if err != nil {
+		ep.logger.Error("failed to record outbox delivery failure",
+			slog.String("event_id", event.ID),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	if attempts < ep.maxAttempts {
+		return
+	}
+
+	if err := ep.outboxRepo.MarkDeadLettered(ctx, event.ID, time.Now().UTC()); err != nil {
+		ep.logger.Error("failed to mark event dead-lettered",
+			slog.String("event_id", event.ID),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	ep.logger.Error("event dead-lettered after exhausting delivery attempts",
+		slog.String("event_id", event.ID),
+		slog.String("event_type", event.EventType),
+		slog.Int("attempts", attempts))
+
+	if ep.metrics != nil {
+		ep.metrics.OutboxEventsDeadLettered.Inc()
+	}
 }
 
 // publishEvent publishes a single event.

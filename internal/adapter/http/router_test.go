@@ -163,6 +163,10 @@ func (stubTransferService) ListTransfersByAccount(ctx context.Context, input use
 	return []*domain.Transfer{}, nil
 }
 
+func (stubTransferService) ListTransfersByAccountCursor(ctx context.Context, input usecase.ListTransfersByAccountCursorInput) (*usecase.ListTransfersByAccountCursorResult, error) {
+	return &usecase.ListTransfersByAccountCursorResult{}, nil
+}
+
 func (stubTransferService) ReverseTransfer(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error) {
 	return &domain.Transfer{ID: input.TransferID}, nil
 }
@@ -185,10 +189,22 @@ func (stubEntryRepository) GetBalanceAtTime(ctx context.Context, accountID strin
 	return decimal.Zero, nil
 }
 
+func (stubEntryRepository) SumAmountsByAccount(ctx context.Context, accountID string) (decimal.Decimal, error) {
+	return decimal.Zero, nil
+}
+
+func (stubEntryRepository) GetAllByAccountOrdered(ctx context.Context, accountID string) ([]*domain.Entry, error) {
+	return []*domain.Entry{}, nil
+}
+
 type stubLedgerRepository struct{}
 
 func (stubLedgerRepository) CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error) {
 	return decimal.Zero, decimal.Zero, nil
+}
+
+func (stubLedgerRepository) CheckConsistencyByCurrency(ctx context.Context) ([]usecase.CurrencyConsistency, error) {
+	return nil, nil
 }
 
 type stubIdempotencyStore struct {

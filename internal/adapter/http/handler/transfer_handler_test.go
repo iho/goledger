@@ -20,6 +20,7 @@ type transferServiceStub struct {
 	createBatchFn func(ctx context.Context, input usecase.CreateBatchTransferInput) ([]*domain.Transfer, error)
 	getFn         func(ctx context.Context, id string) (*domain.Transfer, error)
 	listFn        func(ctx context.Context, input usecase.ListTransfersByAccountInput) ([]*domain.Transfer, error)
+	listCursorFn  func(ctx context.Context, input usecase.ListTransfersByAccountCursorInput) (*usecase.ListTransfersByAccountCursorResult, error)
 	reverseFn     func(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error)
 }
 
@@ -37,6 +38,13 @@ func (s *transferServiceStub) GetTransfer(ctx context.Context, id string) (*doma
 
 func (s *transferServiceStub) ListTransfersByAccount(ctx context.Context, input usecase.ListTransfersByAccountInput) ([]*domain.Transfer, error) {
 	return s.listFn(ctx, input)
+}
+
+func (s *transferServiceStub) ListTransfersByAccountCursor(ctx context.Context, input usecase.ListTransfersByAccountCursorInput) (*usecase.ListTransfersByAccountCursorResult, error) {
+	if s.listCursorFn != nil {
+		return s.listCursorFn(ctx, input)
+	}
+	return &usecase.ListTransfersByAccountCursorResult{}, nil
 }
 
 func (s *transferServiceStub) ReverseTransfer(ctx context.Context, input usecase.ReverseTransferInput) (*domain.Transfer, error) {

@@ -52,6 +52,15 @@ type Metrics struct {
 
 	// Audit metrics
 	AuditLogsCreated *prometheus.CounterVec
+
+	// Reconciliation metrics
+	ReconciliationRuns          *prometheus.CounterVec
+	ReconciliationDiscrepancies prometheus.Gauge
+	ReconciliationChainBreaks   prometheus.Gauge
+	ReconciliationDuration      prometheus.Histogram
+
+	// Outbox metrics
+	OutboxEventsDeadLettered prometheus.Counter
 }
 
 // New creates and registers all Prometheus metrics
@@ -247,5 +256,33 @@ func New() *Metrics {
 			},
 			[]string{"action", "status"},
 		),
+
+		// Reconciliation metrics
+		ReconciliationRuns: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "goledger_reconciliation_runs_total",
+				Help: "Total scheduled reconciliation runs by outcome",
+			},
+			[]string{"status"}, // ok, drift, error
+		),
+		ReconciliationDiscrepancies: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "goledger_reconciliation_discrepancies",
+			Help: "Number of accounts with a balance/entry-sum mismatch as of the last reconciliation run",
+		}),
+		ReconciliationChainBreaks: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "goledger_reconciliation_chain_breaks",
+			Help: "Number of accounts with a broken entry chain as of the last reconciliation run",
+		}),
+		ReconciliationDuration: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "goledger_reconciliation_duration_seconds",
+			Help:    "Duration of scheduled reconciliation runs",
+			Buckets: prometheus.DefBuckets,
+		}),
+
+		// Outbox metrics
+		OutboxEventsDeadLettered: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "goledger_outbox_events_dead_lettered_total",
+			Help: "Total outbox events dead-lettered after exhausting delivery attempts",
+		}),
 	}
 }

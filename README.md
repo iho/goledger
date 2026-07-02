@@ -70,6 +70,8 @@ export DATABASE_URL="postgres://ledger:ledger@localhost:5432/ledger?sslmode=disa
 | `hold capture [hold-id]` | Capture a hold | `./bin/cli hold capture hold_123 --to acc_456` |
 | `hold void [hold-id]` | Void a hold | `./bin/cli hold void hold_123` |
 | `ledger consistency` | Check ledger consistency | `./bin/cli ledger consistency` |
+| `audit verify-chain` | Verify the audit_logs hash chain for tamper evidence | `./bin/cli audit verify-chain` |
+| `outbox dead-letters` | List outbox events that exhausted delivery attempts | `./bin/cli outbox dead-letters` |
 | `hash-password [password]` | Hash a password for manual DB insertion | `./bin/cli hash-password mypass` |
 | `migrate up` / `migrate down` | Run/rollback DB migrations | `./bin/cli migrate up` |
 
@@ -102,7 +104,7 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/accounts` | List accounts |
 | GET | `/accounts/:id` | Get account |
 | GET | `/accounts/:id/entries` | List entries for an account |
-| GET | `/accounts/:id/transfers` | List transfers for an account |
+| GET | `/accounts/:id/transfers` | List transfers for an account. Pass `?cursor=<transfer_id>&limit=N` for keyset pagination (returns `next_cursor`, stable under concurrent writes); omit `cursor` to use legacy `?offset=` pagination |
 | GET | `/accounts/:id/balance/history` | Historical balance |
 | POST | `/transfers` | Create transfer |
 | POST | `/transfers/batch` | Batch transfer (atomic) |
@@ -112,8 +114,22 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/holds` | Create hold |
 | POST | `/holds/:id/capture` | Capture hold |
 | POST | `/holds/:id/void` | Void hold |
+| GET | `/audit` | List audit logs (filters: `user_id`, `action`, `resource_type`, `resource_id`, `start_date`, `end_date`, `limit`, `offset`) |
+| GET | `/audit/export` | Export matching audit logs as CSV |
+| GET | `/audit/resource/:type/:id` | Audit trail for one resource |
+| GET | `/audit/user/:userId` | Audit trail for one user |
 
-Unauthenticated: `GET /health`, `GET /ready`, `GET /metrics` (Prometheus).
+Unauthenticated: `GET /health`, `GET /ready`, `GET /metrics` (Prometheus), `POST /auth/login`.
+
+### Authentication & RBAC
+
+Auth is off by default (`AUTH_ENABLED=false`) so routes behave exactly as documented above with no token required. Set `AUTH_ENABLED=true` (and `JWT_SECRET`) to require a `Bearer` JWT on every `/api/v1` route except `/auth/login`, enforced identically on the HTTP and gRPC APIs:
+
+| Role | Can do |
+|------|--------|
+| `viewer` | Read-only: any GET/list endpoint |
+| `operator` | `viewer` + create/reverse transfers, create/void/capture holds |
+| `admin` | `operator` + create accounts, read `/audit/*` |
 
 ## Configuration
 
@@ -129,10 +145,18 @@ Unauthenticated: `GET /health`, `GET /ready`, `GET /metrics` (Prometheus).
 | `JWT_SECRET` | *(empty)* | JWT signing key — **required** when `AUTH_ENABLED=true`; the server refuses to start otherwise |
 | `JWT_EXPIRATION` | `24h` | JWT token lifetime |
 | `IDEMPOTENCY_TTL` | `24h` | How long idempotency keys are cached in Redis |
+| `RECONCILIATION_INTERVAL` | `1h` | How often the background reconciliation scheduler runs and alerts (via logs + Prometheus) on drift. `0` disables the scheduler; the on-demand `/api/v1/ledger/consistency` endpoint keeps working either way |
+| `OUTBOX_MAX_ATTEMPTS` | `5` | Delivery failures an outbox event tolerates before the publisher dead-letters it (stops retrying); see `./bin/cli outbox dead-letters` |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 | `LOG_FORMAT` | `json` | Log format (json, text) |
+| `TRACING_ENABLED` | `false` | Enable OpenTelemetry distributed tracing across HTTP, gRPC, and pgx queries |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OTLP/gRPC collector address (e.g. `localhost:4317`) when tracing is enabled; if empty, spans are pretty-printed to stdout instead (useful without a collector running) |
 
 Configuration is validated at startup — invalid values (e.g. a non-numeric `HTTP_PORT`, or `DATABASE_MIN_CONNS` greater than `DATABASE_MAX_CONNS`) fail fast with a clear error instead of misbehaving at runtime.
+
+### Distributed tracing
+
+Set `TRACING_ENABLED=true` to get one span per HTTP request (via `otelhttp`) and per gRPC call (via `otelgrpc`), with every Postgres query underneath it as a child span (via a custom `pgx.QueryTracer` in `internal/infrastructure/postgres/tracer.go`). The HTTP access log line includes a `trace_id` field that matches the span's trace ID, so a slow or failed request can be traced end-to-end from the log straight into the trace. Point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector (Jaeger, Tempo, etc.) in production; leave it unset locally to print spans to stdout.
 
 ## Architecture
 

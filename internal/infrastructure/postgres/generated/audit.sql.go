@@ -59,7 +59,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 }
 
 const getAuditLogsByResource = `-- name: GetAuditLogsByResource :many
-SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at FROM audit_logs
+SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at, prev_hash, hash, chain_seq FROM audit_logs
 WHERE resource_type = $1 AND resource_id = $2
 ORDER BY created_at DESC
 `
@@ -92,6 +92,9 @@ func (q *Queries) GetAuditLogsByResource(ctx context.Context, arg GetAuditLogsBy
 			&i.Status,
 			&i.ErrorMessage,
 			&i.CreatedAt,
+			&i.PrevHash,
+			&i.Hash,
+			&i.ChainSeq,
 		); err != nil {
 			return nil, err
 		}
@@ -104,7 +107,7 @@ func (q *Queries) GetAuditLogsByResource(ctx context.Context, arg GetAuditLogsBy
 }
 
 const getAuditLogsByUser = `-- name: GetAuditLogsByUser :many
-SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at FROM audit_logs
+SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at, prev_hash, hash, chain_seq FROM audit_logs
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -139,6 +142,9 @@ func (q *Queries) GetAuditLogsByUser(ctx context.Context, arg GetAuditLogsByUser
 			&i.Status,
 			&i.ErrorMessage,
 			&i.CreatedAt,
+			&i.PrevHash,
+			&i.Hash,
+			&i.ChainSeq,
 		); err != nil {
 			return nil, err
 		}
@@ -151,7 +157,7 @@ func (q *Queries) GetAuditLogsByUser(ctx context.Context, arg GetAuditLogsByUser
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at FROM audit_logs
+SELECT id, user_id, action, resource_type, resource_id, ip_address, user_agent, request_id, before_state, after_state, status, error_message, created_at, prev_hash, hash, chain_seq FROM audit_logs
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -184,6 +190,9 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.Status,
 			&i.ErrorMessage,
 			&i.CreatedAt,
+			&i.PrevHash,
+			&i.Hash,
+			&i.ChainSeq,
 		); err != nil {
 			return nil, err
 		}

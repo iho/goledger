@@ -12,6 +12,17 @@ WHERE from_account_id = $1 OR to_account_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListTransfersByAccountCursor :many
+-- Keyset pagination: transfer IDs are ULIDs (lexically sortable by
+-- creation time), so "id < cursor" is a stable, index-friendly substitute
+-- for OFFSET that doesn't skip/duplicate rows under concurrent inserts.
+-- An empty cursor starts from the most recent transfer.
+SELECT * FROM transfers
+WHERE (from_account_id = $1 OR to_account_id = $1)
+  AND (sqlc.arg(cursor)::text = '' OR id < sqlc.arg(cursor)::text)
+ORDER BY id DESC
+LIMIT $2;
+
 -- name: CountTransfersByAccount :one
 SELECT COUNT(*) FROM transfers
 WHERE from_account_id = $1 OR to_account_id = $1;

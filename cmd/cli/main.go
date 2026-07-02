@@ -43,6 +43,8 @@ func main() {
 	rootCmd.AddCommand(transferCmd())
 	rootCmd.AddCommand(holdCmd())
 	rootCmd.AddCommand(ledgerCmd())
+	rootCmd.AddCommand(auditCmd())
+	rootCmd.AddCommand(outboxCmd())
 	rootCmd.AddCommand(hashPasswordCmd())
 
 	if err := rootCmd.Execute(); err != nil {
@@ -619,6 +621,52 @@ func ledgerCmd() *cobra.Command {
 	return cmd
 }
 
+// ============ AUDIT COMMAND ============
+
+func auditCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "audit",
+		Short: "Audit trail operations",
+	}
+
+	verifyChainCmd := &cobra.Command{
+		Use:   "verify-chain",
+		Short: "Verify the audit_logs hash chain for tamper evidence",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+			verifyAuditChain(ctx, pool)
+		},
+	}
+
+	cmd.AddCommand(verifyChainCmd)
+	return cmd
+}
+
+// ============ OUTBOX COMMAND ============
+
+func outboxCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "outbox",
+		Short: "Outbox event operations",
+	}
+
+	deadLettersCmd := &cobra.Command{
+		Use:   "dead-letters",
+		Short: "List outbox events that exhausted delivery attempts",
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			pool := mustConnectDB(ctx)
+			defer pool.Close()
+			listDeadLetters(ctx, pool)
+		},
+	}
+
+	cmd.AddCommand(deadLettersCmd)
+	return cmd
+}
+
 // ============ HASH PASSWORD COMMAND ============
 
 func hashPasswordCmd() *cobra.Command {
@@ -681,6 +729,79 @@ func createUser(ctx context.Context, pool *pgxpool.Pool, email, name, password, 
 	}
 
 	return userRepo.Create(ctx, user)
+}
+
+func listDeadLetters(ctx context.Context, pool *pgxpool.Pool) {
+	outboxRepo := postgres.NewOutboxRepository(pool)
+
+	events, err := outboxRepo.GetDeadLettered(ctx, 100, 0)
+	if err != nil {
+		fmt.Printf("❌ Failed to list dead letters: %v\n", err)
+		os.Exit(1)
+	}
+
+	if jsonOutput {
+		printJSON(events)
+		return
+	}
+
+	if len(events) == 0 {
+		fmt.Println("✅ No dead-lettered outbox events")
+		return
+	}
+
+	fmt.Printf("Found %d dead-lettered event(s):\n", len(events))
+	for _, e := range events {
+		fmt.Printf("  %s  %s/%s  %s  attempts=%d  last_error=%s\n",
+			e.ID, e.AggregateType, e.AggregateID, e.EventType, e.Attempts, truncate(e.LastError, 80))
+	}
+}
+
+func verifyAuditChain(ctx context.Context, pool *pgxpool.Pool) {
+	rows, err := pool.Query(ctx, "SELECT audit_id, reason FROM verify_audit_log_chain()")
+	if err != nil {
+		fmt.Printf("❌ Chain verification failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer rows.Close()
+
+	type breakRow struct {
+		AuditID string `json:"audit_id"`
+		Reason  string `json:"reason"`
+	}
+
+	var breaks []breakRow
+	for rows.Next() {
+		var b breakRow
+		if err := rows.Scan(&b.AuditID, &b.Reason); err != nil {
+			fmt.Printf("❌ Failed to read verification result: %v\n", err)
+			os.Exit(1)
+		}
+		breaks = append(breaks, b)
+	}
+	if err := rows.Err(); err != nil {
+		fmt.Printf("❌ Chain verification failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if jsonOutput {
+		printJSON(breaks)
+		if len(breaks) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	if len(breaks) == 0 {
+		fmt.Println("✅ Audit log hash chain is intact")
+		return
+	}
+
+	fmt.Printf("❌ Audit log hash chain has %d break(s):\n", len(breaks))
+	for _, b := range breaks {
+		fmt.Printf("   %s: %s\n", b.AuditID, b.Reason)
+	}
+	os.Exit(1)
 }
 
 func checkConsistency(pool *pgxpool.Pool) {

@@ -88,6 +88,32 @@ func (r *EntryRepository) GetByAccount(ctx context.Context, accountID string, li
 	return entries, nil
 }
 
+// SumAmountsByAccount returns the sum of all entry amounts for an account.
+func (r *EntryRepository) SumAmountsByAccount(ctx context.Context, accountID string) (decimal.Decimal, error) {
+	sum, err := r.queries.SumEntryAmountsByAccount(ctx, accountID)
+	if err != nil {
+		return decimal.Zero, err
+	}
+
+	return numericToDecimal(sum), nil
+}
+
+// GetAllByAccountOrdered returns every entry for an account ordered by
+// account_version ascending.
+func (r *EntryRepository) GetAllByAccountOrdered(ctx context.Context, accountID string) ([]*domain.Entry, error) {
+	rows, err := r.queries.GetEntriesByAccountOrdered(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]*domain.Entry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, rowToEntry(row))
+	}
+
+	return entries, nil
+}
+
 // GetBalanceAtTime retrieves the balance at a specific time.
 func (r *EntryRepository) GetBalanceAtTime(ctx context.Context, accountID string, at time.Time) (decimal.Decimal, error) {
 	balance, err := r.queries.GetAccountBalanceAtTime(ctx, generated.GetAccountBalanceAtTimeParams{

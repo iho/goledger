@@ -100,25 +100,38 @@ func (uc *TransferUseCase) CreateTransfer(ctx context.Context, input CreateTrans
 	return result[0], nil
 }
 
-// CreateBatchTransfer creates multiple transfers atomically.
-func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input CreateBatchTransferInput) ([]*domain.Transfer, error) {
+// CreateBatchTransfer creates multiple transfers atomically. On failure, a
+// failure audit row is written for each attempted transfer outside of any
+// database transaction (see auditFailedTransfers) - since transfer creation
+// audit rows are otherwise written inside the transfer transaction, a
+// rejected transfer (insufficient funds, currency mismatch, etc.) would
+// roll back its own audit record along with the rest of the transaction.
+func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input CreateBatchTransferInput) (transfers []*domain.Transfer, err error) {
 	start := time.Now()
 
+	defer func() {
+		if err != nil {
+			uc.auditFailedTransfers(ctx, input, err)
+		}
+	}()
+
 	// 0. Validate inputs before starting transaction
-	if err := domain.ValidateMetadata(input.Metadata); err != nil {
+	if err = domain.ValidateMetadata(input.Metadata); err != nil {
 		return nil, err
 	}
 
 	for _, ti := range input.Transfers {
 		if ti.FromAccountID == ti.ToAccountID {
-			return nil, domain.ErrSameAccount
+			err = domain.ErrSameAccount
+			return nil, err
 		}
 
 		if ti.Amount.LessThanOrEqual(decimal.Zero) {
-			return nil, domain.ErrInvalidAmount
+			err = domain.ErrInvalidAmount
+			return nil, err
 		}
 
-		if err := domain.ValidateMetadata(ti.Metadata); err != nil {
+		if err = domain.ValidateMetadata(ti.Metadata); err != nil {
 			return nil, err
 		}
 	}
@@ -128,9 +141,8 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	sort.Strings(accountIDs)
 
 	// Execute with retry for deadlock/serialization errors
-	var transfers []*domain.Transfer
 	var currencies []string
-	err := uc.retrier.Retry(ctx, func() error {
+	err = uc.retrier.Retry(ctx, func() error {
 		var txErr error
 		transfers, currencies, txErr = uc.executeTransferTransaction(ctx, input, accountIDs)
 		return txErr
@@ -152,6 +164,46 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	}
 
 	return transfers, err
+}
+
+// auditFailedTransfers records a failure audit row for each attempted
+// transfer in the batch, outside any database transaction so it survives
+// the rollback that rejected the transfer. Best-effort: an audit write
+// failure here never masks the original error.
+func (uc *TransferUseCase) auditFailedTransfers(ctx context.Context, input CreateBatchTransferInput, txErr error) {
+	if uc.auditRepo == nil {
+		return
+	}
+
+	userID, requestID, ipAddress, userAgent := auditActor(ctx)
+
+	for _, ti := range input.Transfers {
+		action := domain.AuditActionTransferCreate
+		if ti.ReversedTransferID != nil {
+			action = domain.AuditActionTransferReverse
+		}
+
+		auditLog := &domain.AuditLog{
+			ID:           uc.idGen.Generate(),
+			UserID:       userID,
+			Action:       string(action),
+			ResourceType: "transfer",
+			RequestID:    requestID,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
+			BeforeState: domain.JSON{
+				"from_account_id": ti.FromAccountID,
+				"to_account_id":   ti.ToAccountID,
+				"amount":          ti.Amount.String(),
+			},
+			Status:       string(domain.AuditStatusFailure),
+			ErrorMessage: txErr.Error(),
+			CreatedAt:    time.Now().UTC(),
+		}
+		auditLog.ResourceID = auditLog.ID // no transfer was created; self-reference the audit row
+
+		_ = uc.auditRepo.Create(ctx, auditLog)
+	}
 }
 
 // executeTransferTransaction runs the transfer in a single transaction. It
@@ -214,10 +266,7 @@ func (uc *TransferUseCase) executeTransferTransaction(
 
 	// Audit logging
 	if uc.auditRepo != nil {
-		userID := "system"
-		if user, ok := domain.UserFromContext(ctx); ok {
-			userID = user.ID
-		}
+		userID, requestID, ipAddress, userAgent := auditActor(ctx)
 
 		for _, t := range transfers {
 			action := domain.AuditActionTransferCreate
@@ -231,6 +280,9 @@ func (uc *TransferUseCase) executeTransferTransaction(
 				Action:       string(action),
 				ResourceType: "transfer",
 				ResourceID:   t.ID,
+				RequestID:    requestID,
+				IPAddress:    ipAddress,
+				UserAgent:    userAgent,
 				AfterState:   domain.MarshalState(t),
 				Status:       string(domain.AuditStatusSuccess),
 				CreatedAt:    time.Now().UTC(),
@@ -362,6 +414,7 @@ func (uc *TransferUseCase) processTransfer(
 		ID:            uc.idGen.Generate(),
 		AggregateID:   transfer.ID,
 		AggregateType: domain.AggregateTypeTransfer,
+		EventVersion:  1,
 		CreatedAt:     now,
 		Published:     false,
 	}
@@ -415,6 +468,46 @@ func (uc *TransferUseCase) ListTransfersByAccount(ctx context.Context, input Lis
 	}
 
 	return uc.transferRepo.ListByAccount(ctx, input.AccountID, input.Limit, input.Offset)
+}
+
+// ListTransfersByAccountCursorInput represents input for cursor-paginated
+// transfer listing.
+type ListTransfersByAccountCursorInput struct {
+	AccountID string
+	Cursor    string
+	Limit     int
+}
+
+// ListTransfersByAccountCursorResult is a page of transfers plus the cursor
+// to request the next page. NextCursor is empty when there are no more
+// results.
+type ListTransfersByAccountCursorResult struct {
+	Transfers  []*domain.Transfer
+	NextCursor string
+}
+
+// ListTransfersByAccountCursor lists transfers for an account using keyset
+// pagination (see TransferRepository.ListByAccountCursor).
+func (uc *TransferUseCase) ListTransfersByAccountCursor(ctx context.Context, input ListTransfersByAccountCursorInput) (*ListTransfersByAccountCursorResult, error) {
+	if input.Limit <= 0 {
+		input.Limit = 20
+	}
+
+	if input.Limit > 100 {
+		input.Limit = 100
+	}
+
+	transfers, err := uc.transferRepo.ListByAccountCursor(ctx, input.AccountID, input.Cursor, input.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ListTransfersByAccountCursorResult{Transfers: transfers}
+	if len(transfers) == input.Limit {
+		result.NextCursor = transfers[len(transfers)-1].ID
+	}
+
+	return result, nil
 }
 
 func (uc *TransferUseCase) collectUniqueAccountIDs(transfers []CreateTransferInput) []string {

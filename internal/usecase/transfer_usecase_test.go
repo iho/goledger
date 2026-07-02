@@ -402,12 +402,14 @@ func TestTransferUseCase_AuditLogFailure(t *testing.T) {
 		{ID: "acc-1", Balance: decimal.NewFromInt(500), Currency: "USD", AllowNegativeBalance: true, AllowPositiveBalance: true},
 		{ID: "acc-2", Balance: decimal.Zero, Currency: "USD", AllowNegativeBalance: false, AllowPositiveBalance: true},
 	}, nil)
-	idGen.EXPECT().Generate().Return("generated-id").Times(5) // includes audit log id
+	idGen.EXPECT().Generate().Return("generated-id").Times(6) // includes audit log id + failure-audit id
 	txRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
 	entryRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil).Times(2)
 	accRepo.EXPECT().UpdateBalance(gomock.Any(), mockTx, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(2)
 	outboxRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
 	auditRepo.EXPECT().CreateTx(gomock.Any(), mockTx, gomock.Any()).Return(errors.New("audit failure"))
+	// The failed-transfer path writes a best-effort failure audit row outside the tx.
+	auditRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
 	uc := usecase.NewTransferUseCase(txMgr, accRepo, txRepo, entryRepo, outboxRepo, auditRepo, idGen, nil)

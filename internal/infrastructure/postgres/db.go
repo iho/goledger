@@ -41,6 +41,7 @@ func NewPoolWithConfig(ctx context.Context, cfg PoolConfig) (*pgxpool.Pool, erro
 	config.MinConns = toInt32(cfg.MinConns)
 	config.MaxConnLifetime = cfg.MaxConnLifetime
 	config.MaxConnIdleTime = cfg.MaxConnIdleTime
+	config.ConnConfig.Tracer = newOtelQueryTracer()
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {

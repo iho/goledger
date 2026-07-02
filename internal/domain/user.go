@@ -24,12 +24,36 @@ type contextKey string
 const (
 	// UserContextKey is the context key for the authenticated user
 	UserContextKey contextKey = "user"
+
+	// RequestMetaContextKey is the context key for per-request metadata
+	// (request ID, client IP, user agent) used for audit trail attribution.
+	RequestMetaContextKey contextKey = "requestMeta"
 )
 
 // UserFromContext extracts the authenticated user from context
 func UserFromContext(ctx context.Context) (*User, bool) {
 	user, ok := ctx.Value(UserContextKey).(*User)
 	return user, ok
+}
+
+// RequestMeta carries request-scoped attribution data (request ID, client
+// IP, user agent) from the transport layer down to use cases, so audit rows
+// can be traced back to the originating HTTP/gRPC request.
+type RequestMeta struct {
+	RequestID string
+	IPAddress string
+	UserAgent string
+}
+
+// RequestMetaFromContext extracts request metadata from context.
+func RequestMetaFromContext(ctx context.Context) (RequestMeta, bool) {
+	meta, ok := ctx.Value(RequestMetaContextKey).(RequestMeta)
+	return meta, ok
+}
+
+// ContextWithRequestMeta returns a new context carrying the given request metadata.
+func ContextWithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
+	return context.WithValue(ctx, RequestMetaContextKey, meta)
 }
 
 // Role represents a user's access level

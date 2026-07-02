@@ -89,7 +89,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil // User not found is not an error here
+		return nil, errors.New("user not found")
 	}
 
 	return &user, err

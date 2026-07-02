@@ -242,6 +242,21 @@ func (mr *MockTransferRepositoryMockRecorder) ListByAccount(ctx, accountID, limi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByAccount", reflect.TypeOf((*MockTransferRepository)(nil).ListByAccount), ctx, accountID, limit, offset)
 }
 
+// ListByAccountCursor mocks base method.
+func (m *MockTransferRepository) ListByAccountCursor(ctx context.Context, accountID, cursor string, limit int) ([]*domain.Transfer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByAccountCursor", ctx, accountID, cursor, limit)
+	ret0, _ := ret[0].([]*domain.Transfer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListByAccountCursor indicates an expected call of ListByAccountCursor.
+func (mr *MockTransferRepositoryMockRecorder) ListByAccountCursor(ctx, accountID, cursor, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByAccountCursor", reflect.TypeOf((*MockTransferRepository)(nil).ListByAccountCursor), ctx, accountID, cursor, limit)
+}
+
 // MockEntryRepository is a mock of EntryRepository interface.
 type MockEntryRepository struct {
 	ctrl     *gomock.Controller
@@ -278,6 +293,21 @@ func (m *MockEntryRepository) Create(ctx context.Context, tx usecase.Transaction
 func (mr *MockEntryRepositoryMockRecorder) Create(ctx, tx, entry any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockEntryRepository)(nil).Create), ctx, tx, entry)
+}
+
+// GetAllByAccountOrdered mocks base method.
+func (m *MockEntryRepository) GetAllByAccountOrdered(ctx context.Context, accountID string) ([]*domain.Entry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllByAccountOrdered", ctx, accountID)
+	ret0, _ := ret[0].([]*domain.Entry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllByAccountOrdered indicates an expected call of GetAllByAccountOrdered.
+func (mr *MockEntryRepositoryMockRecorder) GetAllByAccountOrdered(ctx, accountID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllByAccountOrdered", reflect.TypeOf((*MockEntryRepository)(nil).GetAllByAccountOrdered), ctx, accountID)
 }
 
 // GetBalanceAtTime mocks base method.
@@ -325,6 +355,21 @@ func (mr *MockEntryRepositoryMockRecorder) GetByTransfer(ctx, transferID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByTransfer", reflect.TypeOf((*MockEntryRepository)(nil).GetByTransfer), ctx, transferID)
 }
 
+// SumAmountsByAccount mocks base method.
+func (m *MockEntryRepository) SumAmountsByAccount(ctx context.Context, accountID string) (decimal.Decimal, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SumAmountsByAccount", ctx, accountID)
+	ret0, _ := ret[0].(decimal.Decimal)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SumAmountsByAccount indicates an expected call of SumAmountsByAccount.
+func (mr *MockEntryRepositoryMockRecorder) SumAmountsByAccount(ctx, accountID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SumAmountsByAccount", reflect.TypeOf((*MockEntryRepository)(nil).SumAmountsByAccount), ctx, accountID)
+}
+
 // MockLedgerRepository is a mock of LedgerRepository interface.
 type MockLedgerRepository struct {
 	ctrl     *gomock.Controller
@@ -363,6 +408,21 @@ func (m *MockLedgerRepository) CheckConsistency(ctx context.Context) (decimal.De
 func (mr *MockLedgerRepositoryMockRecorder) CheckConsistency(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckConsistency", reflect.TypeOf((*MockLedgerRepository)(nil).CheckConsistency), ctx)
+}
+
+// CheckConsistencyByCurrency mocks base method.
+func (m *MockLedgerRepository) CheckConsistencyByCurrency(ctx context.Context) ([]usecase.CurrencyConsistency, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckConsistencyByCurrency", ctx)
+	ret0, _ := ret[0].([]usecase.CurrencyConsistency)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckConsistencyByCurrency indicates an expected call of CheckConsistencyByCurrency.
+func (mr *MockLedgerRepositoryMockRecorder) CheckConsistencyByCurrency(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckConsistencyByCurrency", reflect.TypeOf((*MockLedgerRepository)(nil).CheckConsistencyByCurrency), ctx)
 }
 
 // MockHoldRepository is a mock of HoldRepository interface.
@@ -529,6 +589,21 @@ func (mr *MockOutboxRepositoryMockRecorder) GetByAggregate(ctx, aggregateType, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByAggregate", reflect.TypeOf((*MockOutboxRepository)(nil).GetByAggregate), ctx, aggregateType, aggregateID, limit, offset)
 }
 
+// GetDeadLettered mocks base method.
+func (m *MockOutboxRepository) GetDeadLettered(ctx context.Context, limit, offset int) ([]*domain.OutboxEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeadLettered", ctx, limit, offset)
+	ret0, _ := ret[0].([]*domain.OutboxEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeadLettered indicates an expected call of GetDeadLettered.
+func (mr *MockOutboxRepositoryMockRecorder) GetDeadLettered(ctx, limit, offset any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeadLettered", reflect.TypeOf((*MockOutboxRepository)(nil).GetDeadLettered), ctx, limit, offset)
+}
+
 // GetUnpublished mocks base method.
 func (m *MockOutboxRepository) GetUnpublished(ctx context.Context, limit int) ([]*domain.OutboxEvent, error) {
 	m.ctrl.T.Helper()
@@ -544,6 +619,20 @@ func (mr *MockOutboxRepositoryMockRecorder) GetUnpublished(ctx, limit any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnpublished", reflect.TypeOf((*MockOutboxRepository)(nil).GetUnpublished), ctx, limit)
 }
 
+// MarkDeadLettered mocks base method.
+func (m *MockOutboxRepository) MarkDeadLettered(ctx context.Context, id string, at time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkDeadLettered", ctx, id, at)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkDeadLettered indicates an expected call of MarkDeadLettered.
+func (mr *MockOutboxRepositoryMockRecorder) MarkDeadLettered(ctx, id, at any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkDeadLettered", reflect.TypeOf((*MockOutboxRepository)(nil).MarkDeadLettered), ctx, id, at)
+}
+
 // MarkPublished mocks base method.
 func (m *MockOutboxRepository) MarkPublished(ctx context.Context, id string, publishedAt time.Time) error {
 	m.ctrl.T.Helper()
@@ -556,6 +645,21 @@ func (m *MockOutboxRepository) MarkPublished(ctx context.Context, id string, pub
 func (mr *MockOutboxRepositoryMockRecorder) MarkPublished(ctx, id, publishedAt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPublished", reflect.TypeOf((*MockOutboxRepository)(nil).MarkPublished), ctx, id, publishedAt)
+}
+
+// RecordFailure mocks base method.
+func (m *MockOutboxRepository) RecordFailure(ctx context.Context, id, lastError string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordFailure", ctx, id, lastError)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecordFailure indicates an expected call of RecordFailure.
+func (mr *MockOutboxRepositoryMockRecorder) RecordFailure(ctx, id, lastError any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordFailure", reflect.TypeOf((*MockOutboxRepository)(nil).RecordFailure), ctx, id, lastError)
 }
 
 // MockAuditRepository is a mock of AuditRepository interface.

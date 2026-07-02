@@ -15,6 +15,13 @@ LIMIT $2 OFFSET $3;
 -- name: CountEntriesByAccount :one
 SELECT COUNT(*) FROM entries WHERE account_id = $1;
 
+-- name: GetEntriesByAccountOrdered :many
+-- All entries for an account in chain order (oldest first), for walking the
+-- previous/current balance and version chain during reconciliation.
+SELECT * FROM entries
+WHERE account_id = $1
+ORDER BY account_version ASC;
+
 -- name: GetAccountBalanceAtTime :one
 SELECT COALESCE(
     (SELECT account_current_balance FROM entries

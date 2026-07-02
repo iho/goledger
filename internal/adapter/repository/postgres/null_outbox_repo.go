@@ -35,3 +35,15 @@ func (r *NullOutboxRepository) GetByAggregate(ctx context.Context, aggregateType
 func (r *NullOutboxRepository) DeletePublished(ctx context.Context, before time.Time) error {
 	return nil
 }
+
+func (r *NullOutboxRepository) RecordFailure(ctx context.Context, id, lastError string) (int, error) {
+	return 0, nil
+}
+
+func (r *NullOutboxRepository) MarkDeadLettered(ctx context.Context, id string, at time.Time) error {
+	return nil
+}
+
+func (r *NullOutboxRepository) GetDeadLettered(ctx context.Context, limit, offset int) ([]*domain.OutboxEvent, error) {
+	return nil, nil
+}

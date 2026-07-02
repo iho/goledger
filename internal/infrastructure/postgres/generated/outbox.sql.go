@@ -12,9 +12,13 @@ import (
 )
 
 const createOutboxEvent = `-- name: CreateOutboxEvent :one
-INSERT INTO outbox_events (id, aggregate_id, aggregate_type, event_type, payload, created_at, published)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published
+INSERT INTO outbox_events (id, aggregate_id, aggregate_type, event_type, event_version, aggregate_sequence, payload, created_at, published)
+VALUES (
+    $1, $2, $3, $4, $5,
+    COALESCE((SELECT MAX(aggregate_sequence) FROM outbox_events WHERE aggregate_type = $3 AND aggregate_id = $2), 0) + 1,
+    $6, $7, $8
+)
+RETURNING id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published, event_version, aggregate_sequence, attempts, last_error, dead_lettered_at
 `
 
 type CreateOutboxEventParams struct {
@@ -22,17 +26,24 @@ type CreateOutboxEventParams struct {
 	AggregateID   string             `json:"aggregate_id"`
 	AggregateType string             `json:"aggregate_type"`
 	EventType     string             `json:"event_type"`
+	EventVersion  int32              `json:"event_version"`
 	Payload       []byte             `json:"payload"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	Published     bool               `json:"published"`
 }
 
+// aggregate_sequence is computed as the next number for this aggregate,
+// relying on the caller already holding a row lock on the aggregate (the
+// account/hold FOR UPDATE taken earlier in the same transaction) to
+// serialize concurrent writers - see idx_outbox_events_aggregate_sequence
+// for the invariant this must uphold.
 func (q *Queries) CreateOutboxEvent(ctx context.Context, arg CreateOutboxEventParams) (OutboxEvent, error) {
 	row := q.db.QueryRow(ctx, createOutboxEvent,
 		arg.ID,
 		arg.AggregateID,
 		arg.AggregateType,
 		arg.EventType,
+		arg.EventVersion,
 		arg.Payload,
 		arg.CreatedAt,
 		arg.Published,
@@ -47,6 +58,11 @@ func (q *Queries) CreateOutboxEvent(ctx context.Context, arg CreateOutboxEventPa
 		&i.CreatedAt,
 		&i.PublishedAt,
 		&i.Published,
+		&i.EventVersion,
+		&i.AggregateSequence,
+		&i.Attempts,
+		&i.LastError,
+		&i.DeadLetteredAt,
 	)
 	return i, err
 }
@@ -61,8 +77,54 @@ func (q *Queries) DeletePublishedEvents(ctx context.Context, publishedAt pgtype.
 	return err
 }
 
+const getDeadLetteredEvents = `-- name: GetDeadLetteredEvents :many
+SELECT id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published, event_version, aggregate_sequence, attempts, last_error, dead_lettered_at FROM outbox_events
+WHERE dead_lettered_at IS NOT NULL
+ORDER BY dead_lettered_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type GetDeadLetteredEventsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetDeadLetteredEvents(ctx context.Context, arg GetDeadLetteredEventsParams) ([]OutboxEvent, error) {
+	rows, err := q.db.Query(ctx, getDeadLetteredEvents, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OutboxEvent{}
+	for rows.Next() {
+		var i OutboxEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AggregateID,
+			&i.AggregateType,
+			&i.EventType,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.PublishedAt,
+			&i.Published,
+			&i.EventVersion,
+			&i.AggregateSequence,
+			&i.Attempts,
+			&i.LastError,
+			&i.DeadLetteredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEventsByAggregate = `-- name: GetEventsByAggregate :many
-SELECT id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published FROM outbox_events
+SELECT id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published, event_version, aggregate_sequence, attempts, last_error, dead_lettered_at FROM outbox_events
 WHERE aggregate_type = $1 AND aggregate_id = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -98,6 +160,11 @@ func (q *Queries) GetEventsByAggregate(ctx context.Context, arg GetEventsByAggre
 			&i.CreatedAt,
 			&i.PublishedAt,
 			&i.Published,
+			&i.EventVersion,
+			&i.AggregateSequence,
+			&i.Attempts,
+			&i.LastError,
+			&i.DeadLetteredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -110,12 +177,14 @@ func (q *Queries) GetEventsByAggregate(ctx context.Context, arg GetEventsByAggre
 }
 
 const getUnpublishedEvents = `-- name: GetUnpublishedEvents :many
-SELECT id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published FROM outbox_events
-WHERE published = FALSE
+SELECT id, aggregate_id, aggregate_type, event_type, payload, created_at, published_at, published, event_version, aggregate_sequence, attempts, last_error, dead_lettered_at FROM outbox_events
+WHERE published = FALSE AND dead_lettered_at IS NULL
 ORDER BY created_at ASC
 LIMIT $1
 `
 
+// Excludes dead-lettered events so one poison message can't block the
+// whole queue behind it; see RecordOutboxFailure/MarkOutboxDeadLettered.
 func (q *Queries) GetUnpublishedEvents(ctx context.Context, limit int32) ([]OutboxEvent, error) {
 	rows, err := q.db.Query(ctx, getUnpublishedEvents, limit)
 	if err != nil {
@@ -134,6 +203,11 @@ func (q *Queries) GetUnpublishedEvents(ctx context.Context, limit int32) ([]Outb
 			&i.CreatedAt,
 			&i.PublishedAt,
 			&i.Published,
+			&i.EventVersion,
+			&i.AggregateSequence,
+			&i.Attempts,
+			&i.LastError,
+			&i.DeadLetteredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -159,4 +233,39 @@ type MarkEventPublishedParams struct {
 func (q *Queries) MarkEventPublished(ctx context.Context, arg MarkEventPublishedParams) error {
 	_, err := q.db.Exec(ctx, markEventPublished, arg.ID, arg.PublishedAt)
 	return err
+}
+
+const markOutboxDeadLettered = `-- name: MarkOutboxDeadLettered :exec
+UPDATE outbox_events
+SET dead_lettered_at = $2
+WHERE id = $1
+`
+
+type MarkOutboxDeadLetteredParams struct {
+	ID             string             `json:"id"`
+	DeadLetteredAt pgtype.Timestamptz `json:"dead_lettered_at"`
+}
+
+func (q *Queries) MarkOutboxDeadLettered(ctx context.Context, arg MarkOutboxDeadLetteredParams) error {
+	_, err := q.db.Exec(ctx, markOutboxDeadLettered, arg.ID, arg.DeadLetteredAt)
+	return err
+}
+
+const recordOutboxFailure = `-- name: RecordOutboxFailure :one
+UPDATE outbox_events
+SET attempts = attempts + 1, last_error = $2
+WHERE id = $1
+RETURNING attempts
+`
+
+type RecordOutboxFailureParams struct {
+	ID        string  `json:"id"`
+	LastError *string `json:"last_error"`
+}
+
+func (q *Queries) RecordOutboxFailure(ctx context.Context, arg RecordOutboxFailureParams) (int32, error) {
+	row := q.db.QueryRow(ctx, recordOutboxFailure, arg.ID, arg.LastError)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }

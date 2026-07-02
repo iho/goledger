@@ -127,6 +127,43 @@ func (q *Queries) GetEntriesByAccount(ctx context.Context, arg GetEntriesByAccou
 	return items, nil
 }
 
+const getEntriesByAccountOrdered = `-- name: GetEntriesByAccountOrdered :many
+SELECT id, account_id, transfer_id, amount, account_previous_balance, account_current_balance, account_version, created_at FROM entries
+WHERE account_id = $1
+ORDER BY account_version ASC
+`
+
+// All entries for an account in chain order (oldest first), for walking the
+// previous/current balance and version chain during reconciliation.
+func (q *Queries) GetEntriesByAccountOrdered(ctx context.Context, accountID string) ([]Entry, error) {
+	rows, err := q.db.Query(ctx, getEntriesByAccountOrdered, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Entry{}
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.TransferID,
+			&i.Amount,
+			&i.AccountPreviousBalance,
+			&i.AccountCurrentBalance,
+			&i.AccountVersion,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntriesByTransfer = `-- name: GetEntriesByTransfer :many
 SELECT id, account_id, transfer_id, amount, account_previous_balance, account_current_balance, account_version, created_at FROM entries WHERE transfer_id = $1 ORDER BY created_at
 `

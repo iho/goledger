@@ -105,6 +105,28 @@ func (r *TransferRepository) ListByAccount(ctx context.Context, accountID string
 	return transfers, nil
 }
 
+// ListByAccountCursor lists transfers for an account using keyset
+// pagination on ULID id. An empty cursor starts from the most recent
+// transfer; pass the ID of the last transfer from the previous page to
+// continue.
+func (r *TransferRepository) ListByAccountCursor(ctx context.Context, accountID, cursor string, limit int) ([]*domain.Transfer, error) {
+	rows, err := r.queries.ListTransfersByAccountCursor(ctx, generated.ListTransfersByAccountCursorParams{
+		FromAccountID: accountID,
+		Cursor:        cursor,
+		Limit:         toInt32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	transfers := make([]*domain.Transfer, 0, len(rows))
+	for _, row := range rows {
+		transfers = append(transfers, rowToTransfer(row))
+	}
+
+	return transfers, nil
+}
+
 func rowToTransfer(row generated.Transfer) *domain.Transfer {
 	var metadata map[string]any
 	if row.Metadata != nil {

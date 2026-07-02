@@ -44,7 +44,10 @@ func (s *stubAccountRepository) List(ctx context.Context, limit, offset int) ([]
 	return s.listFn(ctx, limit, offset)
 }
 
-type stubEntryRepository struct{}
+type stubEntryRepository struct {
+	sumFn     func(ctx context.Context, accountID string) (decimal.Decimal, error)
+	orderedFn func(ctx context.Context, accountID string) ([]*domain.Entry, error)
+}
 
 func (s *stubEntryRepository) Create(context.Context, usecase.Transaction, *domain.Entry) error {
 	return nil
@@ -58,13 +61,37 @@ func (s *stubEntryRepository) GetByAccount(context.Context, string, int, int) ([
 func (s *stubEntryRepository) GetBalanceAtTime(context.Context, string, time.Time) (decimal.Decimal, error) {
 	return decimal.Zero, nil
 }
+func (s *stubEntryRepository) SumAmountsByAccount(ctx context.Context, accountID string) (decimal.Decimal, error) {
+	if s.sumFn != nil {
+		return s.sumFn(ctx, accountID)
+	}
+	return decimal.Zero, nil
+}
+func (s *stubEntryRepository) GetAllByAccountOrdered(ctx context.Context, accountID string) ([]*domain.Entry, error) {
+	if s.orderedFn != nil {
+		return s.orderedFn(ctx, accountID)
+	}
+	return nil, nil
+}
 
 type stubLedgerRepository struct {
-	checkFn func(ctx context.Context) (decimal.Decimal, decimal.Decimal, error)
+	checkFn      func(ctx context.Context) (decimal.Decimal, decimal.Decimal, error)
+	byCurrencyFn func(ctx context.Context) ([]usecase.CurrencyConsistency, error)
 }
 
 func (s *stubLedgerRepository) CheckConsistency(ctx context.Context) (totalBalance, totalAmount decimal.Decimal, err error) {
 	return s.checkFn(ctx)
+}
+
+func (s *stubLedgerRepository) CheckConsistencyByCurrency(ctx context.Context) ([]usecase.CurrencyConsistency, error) {
+	if s.byCurrencyFn != nil {
+		return s.byCurrencyFn(ctx)
+	}
+	totalBalance, totalAmount, err := s.checkFn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return []usecase.CurrencyConsistency{{Currency: "USD", TotalBalance: totalBalance, TotalEntries: totalAmount}}, nil
 }
 
 func TestReconcileAccount(t *testing.T) {
@@ -84,7 +111,11 @@ func TestReconcileAccount(t *testing.T) {
 		},
 	}
 
-	uc := usecase.NewReconciliationUseCase(accountRepo, &stubEntryRepository{}, &stubLedgerRepository{
+	uc := usecase.NewReconciliationUseCase(accountRepo, &stubEntryRepository{
+		sumFn: func(context.Context, string) (decimal.Decimal, error) {
+			return account.Balance, nil
+		},
+	}, &stubLedgerRepository{
 		checkFn: func(context.Context) (decimal.Decimal, decimal.Decimal, error) {
 			return decimal.Zero, decimal.Zero, nil
 		},
@@ -232,7 +263,18 @@ func TestGenerateReconciliationReport(t *testing.T) {
 		},
 	}
 
-	uc := usecase.NewReconciliationUseCase(accountRepo, &stubEntryRepository{}, ledgerRepo)
+	entryRepo := &stubEntryRepository{
+		sumFn: func(_ context.Context, accountID string) (decimal.Decimal, error) {
+			for _, a := range accounts {
+				if a.ID == accountID {
+					return a.Balance, nil
+				}
+			}
+			return decimal.Zero, nil
+		},
+	}
+
+	uc := usecase.NewReconciliationUseCase(accountRepo, entryRepo, ledgerRepo)
 
 	report, err := uc.GenerateReconciliationReport(context.Background())
 	if err != nil {
@@ -253,5 +295,89 @@ func TestGenerateReconciliationReport(t *testing.T) {
 
 	if report.CheckedAt.IsZero() {
 		t.Fatal("expected CheckedAt timestamp")
+	}
+}
+
+func TestReconcileAccount_DetectsMismatch(t *testing.T) {
+	t.Parallel()
+
+	account := &domain.Account{ID: "acc-1", Balance: decimal.NewFromInt(150)}
+
+	accountRepo := &stubAccountRepository{
+		getByIDFn: func(context.Context, string) (*domain.Account, error) {
+			return account, nil
+		},
+	}
+
+	uc := usecase.NewReconciliationUseCase(accountRepo, &stubEntryRepository{
+		sumFn: func(context.Context, string) (decimal.Decimal, error) {
+			return decimal.NewFromInt(100), nil // drifted from recorded balance
+		},
+	}, &stubLedgerRepository{})
+
+	result, err := uc.ReconcileAccount(context.Background(), "acc-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsReconciled {
+		t.Fatal("expected mismatch to be detected")
+	}
+
+	if !result.Difference.Equal(decimal.NewFromInt(50)) {
+		t.Fatalf("expected difference 50, got %s", result.Difference)
+	}
+}
+
+func TestVerifyEntryChain_Valid(t *testing.T) {
+	t.Parallel()
+
+	entries := []*domain.Entry{
+		{ID: "e1", AccountVersion: 1, AccountPreviousBalance: decimal.Zero, AccountCurrentBalance: decimal.NewFromInt(100)},
+		{ID: "e2", AccountVersion: 2, AccountPreviousBalance: decimal.NewFromInt(100), AccountCurrentBalance: decimal.NewFromInt(150)},
+	}
+
+	uc := usecase.NewReconciliationUseCase(&stubAccountRepository{}, &stubEntryRepository{
+		orderedFn: func(context.Context, string) ([]*domain.Entry, error) {
+			return entries, nil
+		},
+	}, &stubLedgerRepository{})
+
+	result, err := uc.VerifyEntryChain(context.Background(), "acc-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.Valid {
+		t.Fatalf("expected valid chain, got breaks: %+v", result.Breaks)
+	}
+}
+
+func TestVerifyEntryChain_DetectsGapAndBalanceMismatch(t *testing.T) {
+	t.Parallel()
+
+	entries := []*domain.Entry{
+		{ID: "e1", AccountVersion: 1, AccountPreviousBalance: decimal.Zero, AccountCurrentBalance: decimal.NewFromInt(100)},
+		// account_version jumps from 1 to 3 (gap), and previous_balance doesn't match e1's current_balance.
+		{ID: "e2", AccountVersion: 3, AccountPreviousBalance: decimal.NewFromInt(999), AccountCurrentBalance: decimal.NewFromInt(150)},
+	}
+
+	uc := usecase.NewReconciliationUseCase(&stubAccountRepository{}, &stubEntryRepository{
+		orderedFn: func(context.Context, string) ([]*domain.Entry, error) {
+			return entries, nil
+		},
+	}, &stubLedgerRepository{})
+
+	result, err := uc.VerifyEntryChain(context.Background(), "acc-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Valid {
+		t.Fatal("expected chain to be marked invalid")
+	}
+
+	if len(result.Breaks) != 2 {
+		t.Fatalf("expected 2 breaks (balance mismatch + version gap), got %d: %+v", len(result.Breaks), result.Breaks)
 	}
 }

@@ -107,6 +107,25 @@ func GetUserFromContext(ctx context.Context) (*domain.User, bool) {
 	return user, ok
 }
 
+// MethodRoleInterceptor enforces per-RPC minimum roles. Methods not present
+// in roles only require a valid authenticated user (any role). Must run
+// after AuthInterceptor in the chain, since it reads the user from context.
+func MethodRoleInterceptor(roles map[string]domain.Role) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		minRole, ok := roles[info.FullMethod]
+		if !ok {
+			minRole = domain.RoleViewer
+		}
+
+		return RequireRoleInterceptor(minRole)(ctx, req, info, handler)
+	}
+}
+
 // ChainUnaryServer chains multiple unary interceptors
 func ChainUnaryServer(interceptors ...grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
