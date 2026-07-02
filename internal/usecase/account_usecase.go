@@ -53,10 +53,10 @@ func (uc *AccountUseCase) CreateAccount(ctx context.Context, input CreateAccount
 	}()
 
 	// Validate input
-	if err = domain.ValidateAccountName(input.Name); err != nil {
+	if err := domain.ValidateAccountName(input.Name); err != nil {
 		return nil, err
 	}
-	if err = domain.ValidateCurrency(input.Currency); err != nil {
+	if err := domain.ValidateCurrency(input.Currency); err != nil {
 		return nil, err
 	}
 

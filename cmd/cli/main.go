@@ -757,29 +757,35 @@ func listDeadLetters(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-func verifyAuditChain(ctx context.Context, pool *pgxpool.Pool) {
+type auditChainBreak struct {
+	AuditID string `json:"audit_id"`
+	Reason  string `json:"reason"`
+}
+
+// fetchAuditChainBreaks runs the verification query and returns without
+// calling os.Exit, so its `defer rows.Close()` always runs on return.
+func fetchAuditChainBreaks(ctx context.Context, pool *pgxpool.Pool) ([]auditChainBreak, error) {
 	rows, err := pool.Query(ctx, "SELECT audit_id, reason FROM verify_audit_log_chain()")
 	if err != nil {
-		fmt.Printf("❌ Chain verification failed: %v\n", err)
-		os.Exit(1)
+		return nil, err
 	}
 	defer rows.Close()
 
-	type breakRow struct {
-		AuditID string `json:"audit_id"`
-		Reason  string `json:"reason"`
-	}
-
-	var breaks []breakRow
+	var breaks []auditChainBreak
 	for rows.Next() {
-		var b breakRow
+		var b auditChainBreak
 		if err := rows.Scan(&b.AuditID, &b.Reason); err != nil {
-			fmt.Printf("❌ Failed to read verification result: %v\n", err)
-			os.Exit(1)
+			return nil, err
 		}
 		breaks = append(breaks, b)
 	}
-	if err := rows.Err(); err != nil {
+
+	return breaks, rows.Err()
+}
+
+func verifyAuditChain(ctx context.Context, pool *pgxpool.Pool) {
+	breaks, err := fetchAuditChainBreaks(ctx, pool)
+	if err != nil {
 		fmt.Printf("❌ Chain verification failed: %v\n", err)
 		os.Exit(1)
 	}

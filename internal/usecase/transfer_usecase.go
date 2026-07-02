@@ -116,7 +116,7 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 	}()
 
 	// 0. Validate inputs before starting transaction
-	if err = domain.ValidateMetadata(input.Metadata); err != nil {
+	if err := domain.ValidateMetadata(input.Metadata); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +131,7 @@ func (uc *TransferUseCase) CreateBatchTransfer(ctx context.Context, input Create
 			return nil, err
 		}
 
-		if err = domain.ValidateMetadata(ti.Metadata); err != nil {
+		if err := domain.ValidateMetadata(ti.Metadata); err != nil {
 			return nil, err
 		}
 	}

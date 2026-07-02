@@ -78,7 +78,7 @@ func (uc *HoldUseCase) HoldFunds(ctx context.Context, accountID string, amount d
 	}
 
 	// Check available balance
-	if err = account.ValidateDebit(amount); err != nil {
+	if err := account.ValidateDebit(amount); err != nil {
 		return nil, err
 	}
 
