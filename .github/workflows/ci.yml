@@ -79,7 +79,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install gotestsum
-        run: go install gotest.tools/gotestsum@v1.11.0
+        run: go install gotest.tools/gotestsum@v1.13.0
 
       - name: Download dependencies
         run: go mod download
